@@ -10,7 +10,8 @@ We plan to implement an Over-The-Air (OTA) update system using an A/B swap. The 
 
 Nick Baret  
 Anthony Lesik  
-Sameeran Chandorkar  
+Sameeran Chandorkar 
+Jeffrey Hansen 
 
 ## Version History
 
