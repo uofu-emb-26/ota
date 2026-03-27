@@ -67,5 +67,21 @@ void flash_write(uint32_t flash_addr, uint16_t data){
     FLASH->CR &= ~FLASH_CR_PG;
 }
 
+void flash_page_remove(uint32_t del_addr){
+    FLASH->CR |= FLASH_CR_PER;
+    FLASH->AR |= del_addr; 
+    FLASH->CR |= FLASH_CR_STRT;
+
+    while((FLASH->SR & FLASH_SR_BSY) != 0){}
+
+    if((FLASH->SR & FLASH_SR_EOP) != 0){
+        FLASH->SR = FLASH_SR_EOP;
+    } else {
+        //error handling
+    }
+
+    FLASH->CR &= ~FLASH_CR_PER;
+}
+
 
 
