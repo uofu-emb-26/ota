@@ -22,6 +22,7 @@
 #include "stm32f0xx_hal.h"
 #include "stm32f0xx_hal_gpio.h"
 #include "flash_update.h"
+#include "stm32f0xx_hal_rcc.h"
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
@@ -107,14 +108,26 @@ int main(void)
   MX_USB_PCD_Init();
   /* USER CODE BEGIN 2 */
 
+  __HAL_RCC_GPIOA_CLK_ENABLE();
   __HAL_RCC_GPIOC_CLK_ENABLE();
 
-  GPIO_InitTypeDef initStr = {GPIO_PIN_6 | GPIO_PIN_7 | GPIO_PIN_8 | GPIO_PIN_9,
+  GPIO_InitTypeDef initStr1 = {GPIO_PIN_6 | GPIO_PIN_7 | GPIO_PIN_8 | GPIO_PIN_9, //LEDS
                               GPIO_MODE_OUTPUT_PP,
                               GPIO_NOPULL,
                               GPIO_SPEED_FREQ_LOW};
 
-                              HAL_GPIO_Init(GPIOC,&initStr);
+                              HAL_GPIO_Init(GPIOC,&initStr1);
+
+  GPIO_InitTypeDef initStr2 = {GPIO_PIN_0, //Pushbutton
+                              GPIO_MODE_INPUT,
+                              GPIO_PULLDOWN,
+                              GPIO_SPEED_FREQ_LOW};
+
+                              HAL_GPIO_Init(GPIOA,&initStr2);
+
+  button_interrupt_config();
+  __NVIC_EnableIRQ(EXTI0_1_IRQn);
+  NVIC_SetPriority(EXTI0_1_IRQn,1);
 
   /* USER CODE END 2 */
 
@@ -174,6 +187,15 @@ void SystemClock_Config(void)
   {
     Error_Handler();
   }
+}
+
+void EXTI0_1_IRQHandler(void){
+  flash_page_remove(0x08010000);
+  flash_unlock();
+  flash_write(0x08010000, 0x0001);
+  flash_lock();
+  EXTI->PR = (1);
+
 }
 
 /**

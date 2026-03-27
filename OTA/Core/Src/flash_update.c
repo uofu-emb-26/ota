@@ -48,5 +48,11 @@ void flash_page_remove(uint32_t del_addr){
     FLASH->CR &= ~FLASH_CR_PER;
 }
 
+void button_interrupt_config()  {
+    EXTI->IMR |= 1UL;
+    EXTI->RTSR |= 1UL;
+    SYSCFG->EXTICR[0] &= ~0xF;
+}
+
 
 
