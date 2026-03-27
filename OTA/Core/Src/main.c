@@ -21,6 +21,7 @@
 #include "stm32f072xb.h"
 #include "stm32f0xx_hal.h"
 #include "stm32f0xx_hal_gpio.h"
+#include "flash_update.h"
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
@@ -122,8 +123,7 @@ int main(void)
   while (1)
   {
     /* USER CODE END WHILE */
-    HAL_Delay(200);
-    HAL_GPIO_TogglePin(GPIOC, GPIO_PIN_8);
+    
     /* USER CODE BEGIN 3 */
   }
   /* USER CODE END 3 */
