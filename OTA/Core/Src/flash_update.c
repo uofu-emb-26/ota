@@ -67,7 +67,23 @@ void flash_write(uint32_t flash_addr, uint16_t data){
     FLASH->CR &= ~FLASH_CR_PG;
 }
 
+/**
+ * @brief The flash memory can be erased page by page or completely (mass erase).
+ * 1. Check that no flash memory operation is ongoing by checking the BSY bit in the
+      FLASH_CR register.
+   2.Set the PER bit in the FLASH_CR register.
+   3. Program the FLASH_AR register to select a page to erase.
+   4. Set the STRT bit in the FLASH_CR register (see note below).
+   5. Wait for the BSY bit to be reset.
+   6. Check the EOP flag in the FLASH_SR register (it is set when the erase operation has
+      succeeded).
+    7. Clear the EOP flag.
+ * @param del_addr 
+ */
 void flash_page_remove(uint32_t del_addr){
+
+    while((FLASH->SR & FLASH_SR_BSY) != 0){}
+
     FLASH->CR |= FLASH_CR_PER;
     FLASH->AR |= del_addr; 
     FLASH->CR |= FLASH_CR_STRT;
