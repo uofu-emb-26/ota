@@ -59,6 +59,10 @@ DMA_HandleTypeDef hdma_usart4_tx;
 
 PCD_HandleTypeDef hpcd_USB_FS;
 
+uint8_t recieved_data[400];
+static uint16_t uart_size;
+char application_message[] = "Hello from application 1!";
+
 /* USER CODE BEGIN PV */
 
 /* USER CODE END PV */
@@ -273,7 +277,7 @@ static void MX_CRC_Init(void)
   hcrc.Init.DefaultInitValueUse = DEFAULT_INIT_VALUE_ENABLE;
   hcrc.Init.InputDataInversionMode = CRC_INPUTDATA_INVERSION_NONE;
   hcrc.Init.OutputDataInversionMode = CRC_OUTPUTDATA_INVERSION_DISABLE;
-  hcrc.InputDataFormat = CRC_INPUTDATA_FORMAT_BYTES;
+  hcrc.InputDataFormat = CRC_INPUTDATA_FORMAT_WORDS;
   if (HAL_CRC_Init(&hcrc) != HAL_OK)
   {
     Error_Handler();
