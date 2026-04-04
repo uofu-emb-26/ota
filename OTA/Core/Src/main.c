@@ -46,13 +46,23 @@
 /* USER CODE END PM */
 
 /* Private variables ---------------------------------------------------------*/
+CRC_HandleTypeDef hcrc;
+
 I2C_HandleTypeDef hi2c2;
 
 SPI_HandleTypeDef hspi2;
 
 TSC_HandleTypeDef htsc;
 
+UART_HandleTypeDef huart4;
+DMA_HandleTypeDef hdma_usart4_rx;
+DMA_HandleTypeDef hdma_usart4_tx;
+
 PCD_HandleTypeDef hpcd_USB_FS;
+
+uint8_t recieved_data[400];
+static uint16_t uart_size;
+char application_message[] = "Hello from application 1!";
 
 /* USER CODE BEGIN PV */
 
@@ -61,16 +71,42 @@ PCD_HandleTypeDef hpcd_USB_FS;
 /* Private function prototypes -----------------------------------------------*/
 void SystemClock_Config(void);
 static void MX_GPIO_Init(void);
+static void MX_DMA_Init(void);
 static void MX_I2C2_Init(void);
 static void MX_SPI2_Init(void);
 static void MX_TSC_Init(void);
 static void MX_USB_PCD_Init(void);
+static void MX_CRC_Init(void);
+static void MX_USART4_UART_Init(void);
 /* USER CODE BEGIN PFP */
 
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
+
+void HAL_UARTEx_RxEventCallback(UART_HandleTypeDef *huart, uint16_t Size)
+{
+  uart_size = Size;
+  HAL_UARTEx_ReceiveToIdle_DMA(&huart4, recieved_data, sizeof(recieved_data));
+}
+
+uint8_t boot_verify_crc(uint8_t *data, uint8_t len, uint32_t crc_host)
+{
+  uint32_t crc_value = 0xff;
+  for(uint32_t i = 0; i < len; i++)
+  {
+    uint32_t i_data = data[i];
+    crc_value = HAL_CRC_Accumulate(&hcrc, &i_data, 1);
+  }
+
+  __HAL_CRC_DR_RESET(&hcrc);
+  if (crc_value == crc_host) 
+  {
+    return 0;
+  }
+  return 1;
+}
 
 /* USER CODE END 0 */
 
@@ -103,10 +139,13 @@ int main(void)
 
   /* Initialize all configured peripherals */
   MX_GPIO_Init();
+  MX_DMA_Init();
   MX_I2C2_Init();
   MX_SPI2_Init();
   MX_TSC_Init();
   MX_USB_PCD_Init();
+  MX_CRC_Init();
+  MX_USART4_UART_Init();
   /* USER CODE BEGIN 2 */
 
   __HAL_RCC_GPIOA_CLK_ENABLE();
@@ -134,14 +173,34 @@ int main(void)
    * Move this call later (after connectivity/sensor checks) for a real app. */
   ota_confirm_current_slot();
 
+
+  HAL_UARTEx_ReceiveToIdle_DMA(&huart4, recieved_data, sizeof(recieved_data));
+
   /* USER CODE END 2 */
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
   while (1)
   {
+    if(uart_size)
+    {
+      /* returns 1 if the CRC doesn't pass */
+      int crc_flag = boot_verify_crc(recieved_data, uart_size - 4, *((uint32_t *)&recieved_data[uart_size - 4]));
+
+      if(crc_flag == 1)
+      {
+        //doesn't match
+        HAL_GPIO_TogglePin(GPIOC, LD3_Pin);
+      }
+      else
+      {
+        //match
+        HAL_GPIO_TogglePin(GPIOC, LD5_Pin);
+        // printf("message: % \n", (char*)recieved_data);
+      }
+    }
     /* USER CODE END WHILE */
-    
+
     /* USER CODE BEGIN 3 */
   }
   /* USER CODE END 3 */
@@ -200,6 +259,37 @@ void EXTI0_1_IRQHandler(void){
   flash_write(0x08010000, 0x0001);
   flash_lock();
   EXTI->PR = (1);
+
+}
+
+/**
+  * @brief CRC Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_CRC_Init(void)
+{
+
+  /* USER CODE BEGIN CRC_Init 0 */
+
+  /* USER CODE END CRC_Init 0 */
+
+  /* USER CODE BEGIN CRC_Init 1 */
+
+  /* USER CODE END CRC_Init 1 */
+  hcrc.Instance = CRC;
+  hcrc.Init.DefaultPolynomialUse = DEFAULT_POLYNOMIAL_ENABLE;
+  hcrc.Init.DefaultInitValueUse = DEFAULT_INIT_VALUE_ENABLE;
+  hcrc.Init.InputDataInversionMode = CRC_INPUTDATA_INVERSION_NONE;
+  hcrc.Init.OutputDataInversionMode = CRC_OUTPUTDATA_INVERSION_DISABLE;
+  hcrc.InputDataFormat = CRC_INPUTDATA_FORMAT_WORDS;
+  if (HAL_CRC_Init(&hcrc) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN CRC_Init 2 */
+
+  /* USER CODE END CRC_Init 2 */
 
 }
 
@@ -335,6 +425,41 @@ static void MX_TSC_Init(void)
 }
 
 /**
+  * @brief USART4 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_USART4_UART_Init(void)
+{
+
+  /* USER CODE BEGIN USART4_Init 0 */
+
+  /* USER CODE END USART4_Init 0 */
+
+  /* USER CODE BEGIN USART4_Init 1 */
+
+  /* USER CODE END USART4_Init 1 */
+  huart4.Instance = USART4;
+  huart4.Init.BaudRate = 38400;
+  huart4.Init.WordLength = UART_WORDLENGTH_8B;
+  huart4.Init.StopBits = UART_STOPBITS_1;
+  huart4.Init.Parity = UART_PARITY_NONE;
+  huart4.Init.Mode = UART_MODE_TX_RX;
+  huart4.Init.HwFlowCtl = UART_HWCONTROL_NONE;
+  huart4.Init.OverSampling = UART_OVERSAMPLING_16;
+  huart4.Init.OneBitSampling = UART_ONE_BIT_SAMPLE_DISABLE;
+  huart4.AdvancedInit.AdvFeatureInit = UART_ADVFEATURE_NO_INIT;
+  if (HAL_UART_Init(&huart4) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN USART4_Init 2 */
+
+  /* USER CODE END USART4_Init 2 */
+
+}
+
+/**
   * @brief USB Initialization Function
   * @param None
   * @retval None
@@ -363,6 +488,22 @@ static void MX_USB_PCD_Init(void)
   /* USER CODE BEGIN USB_Init 2 */
 
   /* USER CODE END USB_Init 2 */
+
+}
+
+/**
+  * Enable DMA controller clock
+  */
+static void MX_DMA_Init(void)
+{
+
+  /* DMA controller clock enable */
+  __HAL_RCC_DMA1_CLK_ENABLE();
+
+  /* DMA interrupt init */
+  /* DMA1_Channel4_5_6_7_IRQn interrupt configuration */
+  HAL_NVIC_SetPriority(DMA1_Channel4_5_6_7_IRQn, 0, 0);
+  HAL_NVIC_EnableIRQ(DMA1_Channel4_5_6_7_IRQn);
 
 }
 
