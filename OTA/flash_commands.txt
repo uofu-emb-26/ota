@@ -1,0 +1,14 @@
+# Configure once (or after CMake changes)
+cmake --preset Debug -B build/Debug
+
+# Build bootloader only
+cmake --build build/Debug --target OTA_bootloader
+
+# Build application only
+cmake --build build/Debug --target OTA
+
+# Build everything
+cmake --build build/Debug --target all
+
+# Clean
+cmake --build build/Debug --target clean

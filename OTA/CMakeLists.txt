@@ -28,43 +28,92 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS TRUE)
 project(${CMAKE_PROJECT_NAME})
 message("Build type: " ${CMAKE_BUILD_TYPE})
 
+message(STATUS "Legacy target 'OTA' is deprecated and no longer built. Use OTA_bootloader, OTA_app_a, or OTA_app_b.")
+
 # Enable CMake support for ASM and C languages
 enable_language(C ASM)
-
-# Create an executable object type
-add_executable(${CMAKE_PROJECT_NAME}
-    Core/Src/flash_update.c
-)
 
 # Add STM32CubeMX generated sources
 add_subdirectory(cmake/stm32cubemx)
 
-# Link directories setup
-target_link_directories(${CMAKE_PROJECT_NAME} PRIVATE
-    # Add user defined library search paths
-)
-
-# Add sources to executable
-target_sources(${CMAKE_PROJECT_NAME} PRIVATE
-    # Add user sources here
-)
-
-# Add include paths
-target_include_directories(${CMAKE_PROJECT_NAME} PRIVATE
-    # Add user defined include paths
-)
-
-# Add project symbols (macros)
-target_compile_definitions(${CMAKE_PROJECT_NAME} PRIVATE
-    # Add user defined symbols
-)
-
 # Remove wrong libob.a library dependency when using cpp files
 list(REMOVE_ITEM CMAKE_C_IMPLICIT_LINK_LIBRARIES ob)
 
-# Add linked libraries
-target_link_libraries(${CMAKE_PROJECT_NAME}
-    stm32cubemx
-
-    # Add user defined libraries
+# ---------------------------------------------------------------------------
+# Slot-specific application targets
+# ---------------------------------------------------------------------------
+set(OTA_APP_COMMON_SOURCES
+    startup_stm32f072xb.s
+    Core/Src/main.c
+    Core/Src/stm32f0xx_it.c
+    Core/Src/stm32f0xx_hal_msp.c
+    Core/Src/sysmem.c
+    Core/Src/syscalls.c
+    Core/Src/flash_update.c
+    Core/Src/ota_metadata.c
 )
+
+add_executable(OTA_app_a ${OTA_APP_COMMON_SOURCES})
+target_link_libraries(OTA_app_a
+    stm32cubemx
+    STM32_Drivers
+    m
+)
+target_compile_definitions(OTA_app_a PRIVATE OTA_APP_SLOT_A=1)
+target_link_options(OTA_app_a PRIVATE
+    -T "${CMAKE_SOURCE_DIR}/STM32F072_APP_A.ld"
+    -Wl,-Map=OTA_app_a.map
+    -Wl,--print-memory-usage
+)
+set_target_properties(OTA_app_a PROPERTIES
+    LINK_DEPENDS "${CMAKE_SOURCE_DIR}/STM32F072_APP_A.ld"
+    ADDITIONAL_CLEAN_FILES "OTA_app_a.map"
+)
+
+add_executable(OTA_app_b ${OTA_APP_COMMON_SOURCES})
+target_link_libraries(OTA_app_b
+    stm32cubemx
+    STM32_Drivers
+    m
+)
+target_compile_definitions(OTA_app_b PRIVATE OTA_APP_SLOT_B=1)
+target_link_options(OTA_app_b PRIVATE
+    -T "${CMAKE_SOURCE_DIR}/STM32F072_APP_B.ld"
+    -Wl,-Map=OTA_app_b.map
+    -Wl,--print-memory-usage
+)
+set_target_properties(OTA_app_b PROPERTIES
+    LINK_DEPENDS "${CMAKE_SOURCE_DIR}/STM32F072_APP_B.ld"
+    ADDITIONAL_CLEAN_FILES "OTA_app_b.map"
+)
+
+# ---------------------------------------------------------------------------
+# Bootloader target
+# ---------------------------------------------------------------------------
+add_executable(OTA_bootloader
+    startup_stm32f072xb.s
+    Core/Src/flash_update.c
+    Core/Src/ota_metadata.c
+    Core/Src/bootloader.c
+    Core/Src/bootloader_main.c
+    Core/Src/syscalls.c
+    Core/Src/sysmem.c
+)
+
+target_link_libraries(OTA_bootloader
+    stm32cubemx
+    STM32_Drivers
+    m
+)
+
+target_link_options(OTA_bootloader PRIVATE
+    -T "${CMAKE_SOURCE_DIR}/STM32F072_BOOTLOADER.ld"
+    -Wl,-Map=OTA_bootloader.map
+    -Wl,--print-memory-usage
+)
+
+set_target_properties(OTA_bootloader PROPERTIES
+    LINK_DEPENDS "${CMAKE_SOURCE_DIR}/STM32F072_BOOTLOADER.ld"
+    ADDITIONAL_CLEAN_FILES "OTA_bootloader.map"
+)
+

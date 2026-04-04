@@ -1,0 +1,11 @@
+*********************** Sameeran's Notes ***********************
+The current repo does not yet implement:
+
+- UART image reception
+- Slot image header format
+- Full image validation before marking valid
+- App-side API for “program inactive slot”
+- Metadata update flow for “pending slot”
+- A proper production confirmation point after startup checks
+
+**********************************************

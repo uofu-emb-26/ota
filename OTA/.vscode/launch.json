@@ -4,7 +4,45 @@
     // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
     "version": "0.2.0",
     "configurations": [
-        
+        {
+            "type": "stlinkgdbtarget",
+            "request": "launch",
+            "name": "Bootloader",
+            "origin": "custom",
+            "cwd": "${workspaceFolder}",
+            "runEntry": "main",
+            "imagesAndSymbols": [
+                {
+                    "imageFileName": "${workspaceFolder}/build/Debug/OTA_bootloader.elf"
+                }
+            ]
+        },
+        {
+            "type": "stlinkgdbtarget",
+            "request": "launch",
+            "name": "App A",
+            "origin": "custom",
+            "cwd": "${workspaceFolder}",
+            "runEntry": "main",
+            "imagesAndSymbols": [
+                {
+                    "imageFileName": "${workspaceFolder}/build/Debug/OTA_app_a.elf"
+                }
+            ]
+        },
+        {
+            "type": "stlinkgdbtarget",
+            "request": "launch",
+            "name": "App B",
+            "origin": "custom",
+            "cwd": "${workspaceFolder}",
+            "runEntry": "main",
+            "imagesAndSymbols": [
+                {
+                    "imageFileName": "${workspaceFolder}/build/Debug/OTA_app_b.elf"
+                }
+            ]
+        },
         {
             "type": "stlinkgdbtarget",
             "request": "launch",

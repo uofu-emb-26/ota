@@ -23,6 +23,7 @@
 #include "stm32f0xx_hal_gpio.h"
 #include "flash_update.h"
 #include "stm32f0xx_hal_rcc.h"
+#include "ota_metadata.h"
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
@@ -129,6 +130,10 @@ int main(void)
   __NVIC_EnableIRQ(EXTI0_1_IRQn);
   NVIC_SetPriority(EXTI0_1_IRQn,1);
 
+  /* Confirm this slot is healthy – clears trial-boot counter in metadata.
+   * Move this call later (after connectivity/sensor checks) for a real app. */
+  ota_confirm_current_slot();
+
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -190,8 +195,8 @@ void SystemClock_Config(void)
 }
 
 void EXTI0_1_IRQHandler(void){
-  flash_page_remove(0x08010000);
   flash_unlock();
+  flash_erase_page(0x08010000);
   flash_write(0x08010000, 0x0001);
   flash_lock();
   EXTI->PR = (1);
