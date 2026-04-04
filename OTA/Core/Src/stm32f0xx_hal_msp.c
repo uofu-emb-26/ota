@@ -23,7 +23,8 @@
 
 /* USER CODE END Includes */
 extern DMA_HandleTypeDef hdma_usart4_rx;
-
+extern DMA_HandleTypeDef hdma_usart4_tx;
+extern UART_HandleTypeDef huart4;
 
 /* Private typedef -----------------------------------------------------------*/
 /* USER CODE BEGIN TD */
