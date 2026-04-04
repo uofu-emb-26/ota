@@ -1,6 +1,0 @@
-/mnt/c/Users/jhans/Documents/ECE 5780/MiniProject/ota/OTA/build/Debug/CMakeFiles/OTA.dir
-/mnt/c/Users/jhans/Documents/ECE 5780/MiniProject/ota/OTA/build/Debug/CMakeFiles/edit_cache.dir
-/mnt/c/Users/jhans/Documents/ECE 5780/MiniProject/ota/OTA/build/Debug/CMakeFiles/rebuild_cache.dir
-/mnt/c/Users/jhans/Documents/ECE 5780/MiniProject/ota/OTA/build/Debug/cmake/stm32cubemx/CMakeFiles/STM32_Drivers.dir
-/mnt/c/Users/jhans/Documents/ECE 5780/MiniProject/ota/OTA/build/Debug/cmake/stm32cubemx/CMakeFiles/edit_cache.dir
-/mnt/c/Users/jhans/Documents/ECE 5780/MiniProject/ota/OTA/build/Debug/cmake/stm32cubemx/CMakeFiles/rebuild_cache.dir

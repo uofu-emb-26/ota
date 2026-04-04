@@ -1,5 +1,0 @@
-/mnt/c/Users/jhans/Documents/ECE 5780/MiniProject/ota/OTA/Core/Src/flash_update.c:7:6:flash_unlock	8	static
-/mnt/c/Users/jhans/Documents/ECE 5780/MiniProject/ota/OTA/Core/Src/flash_update.c:14:6:flash_lock	8	static
-/mnt/c/Users/jhans/Documents/ECE 5780/MiniProject/ota/OTA/Core/Src/flash_update.c:18:6:flash_write	16	static
-/mnt/c/Users/jhans/Documents/ECE 5780/MiniProject/ota/OTA/Core/Src/flash_update.c:35:6:flash_page_remove	16	static
-/mnt/c/Users/jhans/Documents/ECE 5780/MiniProject/ota/OTA/Core/Src/flash_update.c:51:6:button_interrupt_config	8	static
