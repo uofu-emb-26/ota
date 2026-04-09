@@ -1,6 +1,7 @@
 #include <Arduino.h>
 
-#define LED_DELAY 500U
+#define LED_DELAY 250U
+
 // put function declarations here:
 int myFunction(int, int);
 void togglePin(int pin);
