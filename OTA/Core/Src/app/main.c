@@ -18,6 +18,7 @@
 /* USER CODE END Header */
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
+#include "cmsis_gcc.h"
 #include "stm32f072xb.h"
 #include "stm32f0xx_hal.h"
 #include "stm32f0xx_hal_gpio.h"
@@ -37,8 +38,15 @@
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
+#define LED_RED_PIN     GPIO_PIN_6
+#define LED_BLUE_PIN    GPIO_PIN_7
+#define LED_ORANGE_PIN  GPIO_PIN_8
+#define LED_GREEN_PIN   GPIO_PIN_9
 
 /* USER CODE END PD */
+// enable test code using macros
+
+#define APP_UART_ENABLE    0U
 
 /* Private macro -------------------------------------------------------------*/
 /* USER CODE BEGIN PM */
@@ -54,16 +62,17 @@ SPI_HandleTypeDef hspi2;
 
 TSC_HandleTypeDef htsc;
 
-UART_HandleTypeDef huart4;
-DMA_HandleTypeDef hdma_usart4_rx;
-DMA_HandleTypeDef hdma_usart4_tx;
+#if (APP_UART_ENABLE == 1U)
+  UART_HandleTypeDef huart4;
+  DMA_HandleTypeDef hdma_usart4_rx;
+  DMA_HandleTypeDef hdma_usart4_tx;
+
+  uint8_t recieved_data[400];
+  static uint16_t uart_size;
+  char application_message[] = "Hello from application 1!";
+#endif /* APP_UART_ENABLE */
 
 PCD_HandleTypeDef hpcd_USB_FS;
-
-uint8_t recieved_data[400];
-static uint16_t uart_size;
-char application_message[] = "Hello from application 1!";
-
 /* USER CODE BEGIN PV */
 
 /* USER CODE END PV */
@@ -84,12 +93,14 @@ static void MX_USART4_UART_Init(void);
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
-
+#if (APP_UART_ENABLE == 1U)
 void HAL_UARTEx_RxEventCallback(UART_HandleTypeDef *huart, uint16_t Size)
 {
   uart_size = Size;
   HAL_UARTEx_ReceiveToIdle_DMA(&huart4, recieved_data, sizeof(recieved_data));
 }
+#endif /* APP_UART_ENABLE */
+
 
 uint8_t boot_verify_crc(uint8_t *data, uint8_t len, uint32_t crc_host)
 {
@@ -145,27 +156,28 @@ int main(void)
   MX_TSC_Init();
   MX_USB_PCD_Init();
   MX_CRC_Init();
+  #if (APP_UART_ENABLE == 1U)
   MX_USART4_UART_Init();
+  #endif /* APP_UART_ENABLE */
   /* USER CODE BEGIN 2 */
 
   __HAL_RCC_GPIOA_CLK_ENABLE();
   __HAL_RCC_GPIOC_CLK_ENABLE();
 
-  GPIO_InitTypeDef initStr1 = {GPIO_PIN_6 | GPIO_PIN_7 | GPIO_PIN_8 | GPIO_PIN_9, //LEDS
-                              GPIO_MODE_OUTPUT_PP,
-                              GPIO_NOPULL,
-                              GPIO_SPEED_FREQ_LOW};
+  GPIO_InitTypeDef initStr1 = {
+      GPIO_PIN_6 | GPIO_PIN_7 | GPIO_PIN_8 | GPIO_PIN_9, // LEDs
+      GPIO_MODE_OUTPUT_PP, GPIO_NOPULL, GPIO_SPEED_FREQ_LOW};
 
-                              HAL_GPIO_Init(GPIOC,&initStr1);
+  HAL_GPIO_Init(GPIOC, &initStr1);
 
-  GPIO_InitTypeDef initStr2 = {GPIO_PIN_0, //Pushbutton
+  /*GPIO_InitTypeDef initStr2 = {GPIO_PIN_0, //Pushbutton
                               GPIO_MODE_INPUT,
                               GPIO_PULLDOWN,
                               GPIO_SPEED_FREQ_LOW};
 
                               HAL_GPIO_Init(GPIOA,&initStr2);
-
-  button_interrupt_config();
+*/
+  //button_interrupt_config();
   __NVIC_EnableIRQ(EXTI0_1_IRQn);
   NVIC_SetPriority(EXTI0_1_IRQn,1);
 
@@ -174,14 +186,17 @@ int main(void)
   ota_confirm_current_slot();
 
 
+  #if (APP_UART_ENABLE == 1U)
   HAL_UARTEx_ReceiveToIdle_DMA(&huart4, recieved_data, sizeof(recieved_data));
+  #endif /* APP_UART_ENABLE */
 
   /* USER CODE END 2 */
-
+  //HAL_GPIO_WritePin(GPIOC, LED_BLUE_PIN, GPIO_PIN_SET);
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
   while (1)
   {
+    #if (APP_UART_ENABLE == 1U)
     if(uart_size)
     {
       /* returns 1 if the CRC doesn't pass */
@@ -190,15 +205,25 @@ int main(void)
       if(crc_flag == 1)
       {
         //doesn't match
-        HAL_GPIO_TogglePin(GPIOC, LD3_Pin);
+        HAL_GPIO_TogglePin(GPIOC, LED_RED_PIN);
       }
       else
       {
         //match
-        HAL_GPIO_TogglePin(GPIOC, LD5_Pin);
+        HAL_GPIO_TogglePin(GPIOC, LED_GREEN_PIN);
         // printf("message: % \n", (char*)recieved_data);
       }
     }
+#endif /* APP_UART_ENABLE */
+
+    HAL_GPIO_TogglePin(GPIOC, GPIO_PIN_7);
+    HAL_GPIO_TogglePin(GPIOC, GPIO_PIN_8);
+    for (volatile uint32_t i = 0; i < 10000000; i++) 
+    {
+      __NOP();
+    }
+    //HAL_Delay(100000);
+    
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
@@ -424,6 +449,7 @@ static void MX_TSC_Init(void)
 
 }
 
+#if (APP_UART_ENABLE == 1U)
 /**
   * @brief USART4 Initialization Function
   * @param None
@@ -458,7 +484,7 @@ static void MX_USART4_UART_Init(void)
   /* USER CODE END USART4_Init 2 */
 
 }
-
+#endif /* APP_UART_ENABLE */
 /**
   * @brief USB Initialization Function
   * @param None

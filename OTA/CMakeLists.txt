@@ -44,13 +44,14 @@ list(REMOVE_ITEM CMAKE_C_IMPLICIT_LINK_LIBRARIES ob)
 # ---------------------------------------------------------------------------
 set(OTA_APP_COMMON_SOURCES
     startup_stm32f072xb.s
-    Core/Src/main.c
-    Core/Src/stm32f0xx_it.c
-    Core/Src/stm32f0xx_hal_msp.c
-    Core/Src/sysmem.c
-    Core/Src/syscalls.c
-    Core/Src/flash_update.c
-    Core/Src/ota_metadata.c
+    Core/Src/app/main.c
+    Core/Src/app/stm32f0xx_it.c
+    Core/Src/app/stm32f0xx_hal_msp.c
+    Core/Src/common/sysmem.c
+    Core/Src/common/syscalls.c
+    Core/Src/common/flash_update.c
+    Core/Src/common/ota_metadata.c
+    Core/Src/app/hal_gpio.c
 )
 
 add_executable(OTA_app_a ${OTA_APP_COMMON_SOURCES})
@@ -92,12 +93,13 @@ set_target_properties(OTA_app_b PROPERTIES
 # ---------------------------------------------------------------------------
 add_executable(OTA_bootloader
     startup_stm32f072xb.s
-    Core/Src/flash_update.c
-    Core/Src/ota_metadata.c
-    Core/Src/bootloader.c
-    Core/Src/bootloader_main.c
-    Core/Src/syscalls.c
-    Core/Src/sysmem.c
+    Core/Src/common/flash_update.c
+    Core/Src/common/ota_metadata.c
+    Core/Src/boot/bootloader.c
+    Core/Src/boot/bootloader_main.c
+    Core/Src/boot/bootloader_it.c
+    Core/Src/common/syscalls.c
+    Core/Src/common/sysmem.c
 )
 
 target_link_libraries(OTA_bootloader
@@ -117,3 +119,8 @@ set_target_properties(OTA_bootloader PROPERTIES
     ADDITIONAL_CLEAN_FILES "OTA_bootloader.map"
 )
 
+list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
+include(flash_stm32)
+flash_target(OTA_bootloader)
+flash_target(OTA_app_a)
+flash_target(OTA_app_b)

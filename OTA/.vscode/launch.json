@@ -10,6 +10,7 @@
             "name": "Bootloader",
             "origin": "custom",
             "cwd": "${workspaceFolder}",
+            "preBuild": "${command:st-stm32-ide-debug-launch.build}",
             "runEntry": "main",
             "imagesAndSymbols": [
                 {

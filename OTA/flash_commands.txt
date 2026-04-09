@@ -5,10 +5,22 @@ cmake --preset Debug -B build/Debug
 cmake --build build/Debug --target OTA_bootloader
 
 # Build application only
-cmake --build build/Debug --target OTA
+cmake --build build/Debug --target OTA_app_a
+cmake --build build/Debug --target OTA_app_b
+
 
 # Build everything
 cmake --build build/Debug --target all
 
 # Clean
 cmake --build build/Debug --target clean
+
+# Flash Bootloader
+openocd -f interface/stlink.cfg -f target/stm32f0x.cfg -c 'program "build/Debug/OTA_bootloader.elf" verify reset exit'
+
+# Flash Application A
+openocd -f interface/stlink.cfg -f target/stm32f0x.cfg -c 'program "build/Debug/OTA_app_a.elf" verify reset exit'
+
+# Flash Application B
+openocd -f interface/stlink.cfg -f target/stm32f0x.cfg -c 'program "build/Debug/OTA_app_b.elf" verify reset exit'
+

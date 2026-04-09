@@ -71,8 +71,14 @@ void ota_metadata_init_default(ota_metadata_t *meta)
     meta->format_version = OTA_METADATA_FORMAT_VER;
     meta->active_slot    = OTA_SLOT_A;
     meta->pending_slot   = OTA_SLOT_NONE;
-    meta->confirmed_slot = OTA_SLOT_NONE;
+    /* First-boot provisioning assumption:
+     * Bootloader + App A are flashed at manufacturing time.
+     * Mark Slot A as valid/confirmed so blank metadata still boots. */
+    meta->confirmed_slot = OTA_SLOT_A;
+    meta->slot_a_flags   = OTA_FLAG_VALID | OTA_FLAG_CONFIRMED;
+    meta->slot_b_flags   = 0U;
     meta->sequence       = 0U;
+    meta->trial_boot_count = 0U;
     meta->metadata_crc   = ota_metadata_crc(meta);
 }
 

@@ -150,8 +150,8 @@ void DMA1_Channel4_5_6_7_IRQHandler(void)
   /* USER CODE BEGIN DMA1_Channel4_5_6_7_IRQn 0 */
 
   /* USER CODE END DMA1_Channel4_5_6_7_IRQn 0 */
-  HAL_DMA_IRQHandler(&hdma_usart4_rx);
-  HAL_DMA_IRQHandler(&hdma_usart4_tx);
+  // HAL_DMA_IRQHandler(&hdma_usart4_rx);
+  // HAL_DMA_IRQHandler(&hdma_usart4_tx);
   /* USER CODE BEGIN DMA1_Channel4_5_6_7_IRQn 1 */
 
   /* USER CODE END DMA1_Channel4_5_6_7_IRQn 1 */
@@ -165,7 +165,7 @@ void USART3_4_IRQHandler(void)
   /* USER CODE BEGIN USART3_4_IRQn 0 */
 
   /* USER CODE END USART3_4_IRQn 0 */
-  HAL_UART_IRQHandler(&huart4);
+  // HAL_UART_IRQHandler(&huart4);
   /* USER CODE BEGIN USART3_4_IRQn 1 */
 
   /* USER CODE END USART3_4_IRQn 1 */
