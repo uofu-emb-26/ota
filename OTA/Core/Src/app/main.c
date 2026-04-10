@@ -86,7 +86,9 @@ static void MX_SPI2_Init(void);
 static void MX_TSC_Init(void);
 static void MX_USB_PCD_Init(void);
 static void MX_CRC_Init(void);
+#if (APP_UART_ENABLE == 1U)
 static void MX_USART4_UART_Init(void);
+#endif /* APP_UART_ENABLE */
 /* USER CODE BEGIN PFP */
 
 /* USER CODE END PFP */
@@ -127,6 +129,8 @@ uint8_t boot_verify_crc(uint8_t *data, uint8_t len, uint32_t crc_host)
   */
 int main(void)
 {
+  /* Enable all interrupts after jumping to app code */
+  __enable_irq();
 
   /* USER CODE BEGIN 1 */
 
@@ -218,11 +222,7 @@ int main(void)
 
     HAL_GPIO_TogglePin(GPIOC, GPIO_PIN_7);
     HAL_GPIO_TogglePin(GPIOC, GPIO_PIN_8);
-    for (volatile uint32_t i = 0; i < 10000000; i++) 
-    {
-      __NOP();
-    }
-    //HAL_Delay(100000);
+    HAL_Delay(250);
     
     /* USER CODE END WHILE */
 

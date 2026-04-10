@@ -68,7 +68,7 @@ target_link_options(OTA_app_a PRIVATE
 )
 set_target_properties(OTA_app_a PROPERTIES
     LINK_DEPENDS "${CMAKE_SOURCE_DIR}/STM32F072_APP_A.ld"
-    ADDITIONAL_CLEAN_FILES "OTA_app_a.map"
+    ADDITIONAL_CLEAN_FILES "OTA_app_a.map;OTA_app_a.hex"
 )
 
 add_executable(OTA_app_b ${OTA_APP_COMMON_SOURCES})
@@ -85,7 +85,7 @@ target_link_options(OTA_app_b PRIVATE
 )
 set_target_properties(OTA_app_b PROPERTIES
     LINK_DEPENDS "${CMAKE_SOURCE_DIR}/STM32F072_APP_B.ld"
-    ADDITIONAL_CLEAN_FILES "OTA_app_b.map"
+    ADDITIONAL_CLEAN_FILES "OTA_app_b.map;OTA_app_b.hex"
 )
 
 # ---------------------------------------------------------------------------
@@ -117,6 +117,20 @@ target_link_options(OTA_bootloader PRIVATE
 set_target_properties(OTA_bootloader PROPERTIES
     LINK_DEPENDS "${CMAKE_SOURCE_DIR}/STM32F072_BOOTLOADER.ld"
     ADDITIONAL_CLEAN_FILES "OTA_bootloader.map"
+)
+
+add_custom_command(TARGET OTA_app_a POST_BUILD
+    COMMAND arm-none-eabi-objcopy -O ihex
+    $<TARGET_FILE:OTA_app_a>
+    ${CMAKE_CURRENT_BINARY_DIR}/OTA_app_a.hex
+    COMMENT "Generating OTA_app_a.hex"
+)
+
+add_custom_command(TARGET OTA_app_b POST_BUILD
+    COMMAND arm-none-eabi-objcopy -O ihex
+    $<TARGET_FILE:OTA_app_b>
+    ${CMAKE_CURRENT_BINARY_DIR}/OTA_app_b.hex
+    COMMENT "Generating OTA_app_b.hex"
 )
 
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
