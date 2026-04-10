@@ -46,7 +46,8 @@
 /* USER CODE END PD */
 // enable test code using macros
 
-#define APP_UART_ENABLE    0U
+#define APP_UART_ENABLE     0U
+#define APP_UART3_ENABLE    0U
 
 /* Private macro -------------------------------------------------------------*/
 /* USER CODE BEGIN PM */
@@ -55,12 +56,19 @@
 
 /* Private variables ---------------------------------------------------------*/
 CRC_HandleTypeDef hcrc;
-
 I2C_HandleTypeDef hi2c2;
-
 SPI_HandleTypeDef hspi2;
-
 TSC_HandleTypeDef htsc;
+
+#if (APP_UART3_ENABLE)
+volatile uint8_t cmd_arr[] = {0x11,0x22};
+uint8_t rr_val;
+uint8_t new_data;
+uint8_t new_data_h;
+uint8_t invalid_cmd;
+#endif
+
+
 
 #if (APP_UART_ENABLE == 1U)
   UART_HandleTypeDef huart4;
@@ -86,39 +94,288 @@ static void MX_SPI2_Init(void);
 static void MX_TSC_Init(void);
 static void MX_USB_PCD_Init(void);
 static void MX_CRC_Init(void);
-static void MX_USART4_UART_Init(void);
+#if (APP_UART_ENABLE == 1U)
+  static void MX_USART4_UART_Init(void);
+#endif
+
+
 /* USER CODE BEGIN PFP */
 
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
+
+#if (APP_UART3_ENABLE)
+void Reset_Cmd_Arr(){
+  cmd_arr[0] = 0x11;
+  cmd_arr[1] = 0x22;
+}
+
+
+/**
+Red: PC6 of the STM32F072RBT6.
+Orange PC8 of the STM32F072RBT6.
+Green  PC9 of the STM32F072RBT6.
+Blue  PC7 of the STM32F072RBT6.
+ */
+void My_HAL_GPIO_TogglePin(GPIO_TypeDef* GPIOx, uint16_t GPIO_Pin)
+{
+    GPIOx->ODR ^= GPIO_Pin;
+}
+#endif
+
 #if (APP_UART_ENABLE == 1U)
+// Number of data available in application reception buffer (indicates a position in reception buffer until which, data are available)
 void HAL_UARTEx_RxEventCallback(UART_HandleTypeDef *huart, uint16_t Size)
 {
   uart_size = Size;
+  //huart -> UART handle, recieved_data -> pointer to buffer, sizeof(recieved_data) -> amount of data to recieve
   HAL_UARTEx_ReceiveToIdle_DMA(&huart4, recieved_data, sizeof(recieved_data));
+  
 }
 #endif /* APP_UART_ENABLE */
 
 
-uint8_t boot_verify_crc(uint8_t *data, uint8_t len, uint32_t crc_host)
+#if (APP_UART3_ENABLE)
+/* Enable the system clock to the desired USART in the RCC peripheral. */
+void Enable_SysClock_USART()
 {
-  uint32_t crc_value = 0xff;
-  for(uint32_t i = 0; i < len; i++)
-  {
-    uint32_t i_data = data[i];
-    crc_value = HAL_CRC_Accumulate(&hcrc, &i_data, 1);
-  }
-
-  __HAL_CRC_DR_RESET(&hcrc);
-  if (crc_value == crc_host) 
-  {
-    return 0;
-  }
-  return 1;
+  RCC->APB1ENR |= RCC_APB1ENR_USART3EN;
 }
 
+/* Set the Baud rate for communication to be 115200 bits/second. 
+Using the HAL_RCC_GetHCLKFreq() function to get the system clock frequency.
+*/
+void Set_Baud_Rate()
+{
+  /* Set the Baud Rate to 115200 bits/second 
+  Baud_Divider = 8000000/115200 = 69.444
+  USART_BRR = 69*/
+  uint32_t sys_clock_freq = HAL_RCC_GetHCLKFreq();
+  uint32_t target_baud = 115200;
+  USART3->BRR = sys_clock_freq / target_baud;
+}
+
+/* Set the selected pins into alternate function mode and program the correct alternate function
+number into the GPIO AFR registers.*/
+void Config_Pins()
+{
+  GPIOC->MODER |= GPIO_MODER_MODER4_1;
+  GPIOC->MODER |= GPIO_MODER_MODER5_1;
+  GPIOC->MODER &= ~(GPIO_MODER_MODER4_0);
+  GPIOC->MODER &= ~(GPIO_MODER_MODER5_0);
+
+  GPIOC->AFR[0] |= 1 << (4*4);
+  GPIOC->AFR[0] |= 1 << (4*5);
+}
+
+/* Enable the CR1 in USART3*/
+void Enable_USART_Control()
+{
+  USART3->CR1 |= USART_CR1_UE;
+}
+
+/* The transmitter can send data words of either 7, 8 or 9 bits depending on the M bits status.
+The Transmit Enable bit (TE) must be set in order to activate the transmitter function. The
+data in the transmit shift register is output on the TX pin and the corresponding clock pulses
+are output on the CK pin. 
+
+See details of the USART RX on DM---936, section 27.5.3
+*/
+void Enable_TX_RX()
+{
+  USART3->CR1 |= USART_CR1_TE;
+  USART3->CR1 |= USART_CR1_RE;
+}
+
+void Enable_Receive_Register_NE()
+{
+  USART3->CR1 |= USART_CR1_RXNEIE;
+}
+
+// void Enable_NVIC()
+// {
+//   NVIC_EnableIRQ(USART3_4_IRQn);
+//   NVIC_SetPriority(USART3_4_IRQn, 1);
+// }
+
+/*
+Setup the blank interrupt handler.
+Within the handler, save the receive register’s value into a global variable.
+Within the handler set a global variable as a flag indicating new data.
+*/
+// void USART3_4_IRQHandler()
+// {
+//   rr_val = USART3->RDR;
+//   new_data_h = 1;
+// }
+
+
+int Match_CMD_To_LED(uint8_t recieved_data, int num_of_cmds)
+{
+  int flag = 1;
+  if (recieved_data == 0x72)
+  {
+    flag = 0;
+    My_HAL_GPIO_TogglePin(GPIOC, GPIO_PIN_6);
+    return flag;
+  } 
+  else if (recieved_data == 0x62)
+  {
+    flag = 0;
+    My_HAL_GPIO_TogglePin(GPIOC, GPIO_PIN_7);
+    return flag;
+  }
+  else if (recieved_data == 0x6F)
+  {
+    flag = 0;
+    My_HAL_GPIO_TogglePin(GPIOC, GPIO_PIN_8);
+    return flag;
+  }
+  else if (recieved_data == 0x67)
+  {
+    flag = 0;
+    My_HAL_GPIO_TogglePin(GPIOC, GPIO_PIN_9);
+    return flag;
+  }
+  else
+  {
+    // char *error_string = "Invalid Keystroke";
+    // Transmit_String(error_string, num_of_cmds);
+    return flag;    
+  }
+
+}
+
+
+
+/**
+Red: PC6 of the STM32F072RBT6.
+Orange PC8 of the STM32F072RBT6.
+Green  PC9 of the STM32F072RBT6.
+Blue  PC7 of the STM32F072RBT6.
+ */
+void Execute_Cmd()
+{
+  //red LED commands
+  if (cmd_arr[0] == 0x72) 
+  {
+    if(cmd_arr[1] == 0x30)
+    {
+      GPIOC->ODR &= ~(GPIO_ODR_6);
+    }
+    else if (cmd_arr[1] == 0x31) {
+      GPIOC->ODR |= (GPIO_ODR_6);
+    }
+    else if (cmd_arr[1] == 0x32) {
+      My_HAL_GPIO_TogglePin(GPIOC, GPIO_PIN_6);
+    }
+  }
+
+  //blue LED commands
+  if (cmd_arr[0] == 0x62) 
+  {
+    if(cmd_arr[1] == 0x30)
+    {
+      GPIOC->ODR &= ~(GPIO_ODR_7);
+    }
+    else if (cmd_arr[1] == 0x31) {
+      GPIOC->ODR |= (GPIO_ODR_7);
+    }
+    else if (cmd_arr[1] == 0x32) {
+      My_HAL_GPIO_TogglePin(GPIOC, GPIO_PIN_7);
+    }
+  }
+
+  //green LED commands
+  if (cmd_arr[0] == 0x67) 
+  {
+    if(cmd_arr[1] == 0x30)
+    {
+      GPIOC->ODR &= ~(GPIO_ODR_9);
+    }
+    else if (cmd_arr[1] == 0x31) {
+      GPIOC->ODR |= (GPIO_ODR_9);
+    }
+    else if (cmd_arr[1] == 0x32) {
+      My_HAL_GPIO_TogglePin(GPIOC, GPIO_PIN_9);
+    }
+  }
+
+  //orange LED commands
+  if (cmd_arr[0] == 0x6F) 
+  {
+    if(cmd_arr[1] == 0x30)
+    {
+      GPIOC->ODR &= ~(GPIO_ODR_8);
+    }
+    else if (cmd_arr[1] == 0x31) {
+      GPIOC->ODR |= (GPIO_ODR_8);
+    }
+    else if (cmd_arr[1] == 0x32) {
+      My_HAL_GPIO_TogglePin(GPIOC, GPIO_PIN_8);
+    }
+  }
+  Reset_Cmd_Arr();
+}
+
+int Valid_LED_Cmd(uint8_t data)
+{
+  if(data == 0x72 || data == 0x62 || data == 0x6F || data == 0x67)
+  {
+    return 1;
+  }
+  return 0;
+}
+
+int Valid_Num_Cmd(uint8_t data)
+{
+  if(data == 0x30|| data == 0x31 || data == 0x32)
+  {
+    return 1;
+  }
+  return 0;
+}
+
+
+void Check_Data(int num_of_cmds){
+  /* 1. Check and wait on the USART status flag that indicates 
+      the receive (read) register is not empty
+     2. Use an empty while loop which exits once the flag is set
+   */
+  int flag = 1;
+
+  while(flag){
+    if(USART3->ISR & USART_ISR_RXNE_Msk){
+      if (num_of_cmds == 1)
+      {
+        uint8_t recieved_data = USART3->RDR;
+        flag = Match_CMD_To_LED(recieved_data, num_of_cmds);
+      }
+      else 
+      {
+        uint8_t recieved_data = USART3->RDR;
+        if (Valid_LED_Cmd(recieved_data)) {
+          cmd_arr[0] = recieved_data;
+          flag = 0;
+        }
+        else if (Valid_Num_Cmd(recieved_data)) {
+          cmd_arr[1] = recieved_data;
+          new_data = 1;
+          flag = 0;
+        }
+        else {
+          // char *error_string = "Invalid Keystroke";
+          // Transmit_String(error_string, num_of_cmds);
+          Match_CMD_To_LED('d', 1);
+          flag = 0;
+        }
+      }
+    }
+  }
+}
+#endif
 /* USER CODE END 0 */
 
 /**
@@ -161,6 +418,14 @@ int main(void)
   #endif /* APP_UART_ENABLE */
   /* USER CODE BEGIN 2 */
 
+  #if (APP_UART3_ENABLE)
+  Enable_SysClock_USART();
+  Set_Baud_Rate();
+  Config_Pins();
+  Enable_TX_RX();
+  Enable_USART_Control();
+  #endif
+
   __HAL_RCC_GPIOA_CLK_ENABLE();
   __HAL_RCC_GPIOC_CLK_ENABLE();
 
@@ -198,7 +463,7 @@ int main(void)
   {
     #if (APP_UART_ENABLE == 1U)
     if(uart_size)
-    {
+     {
       /* returns 1 if the CRC doesn't pass */
       int crc_flag = boot_verify_crc(recieved_data, uart_size - 4, *((uint32_t *)&recieved_data[uart_size - 4]));
 
@@ -213,7 +478,8 @@ int main(void)
         HAL_GPIO_TogglePin(GPIOC, LED_GREEN_PIN);
         // printf("message: % \n", (char*)recieved_data);
       }
-    }
+      HAL_GPIO_TogglePin(GPIOC, GPIO_PIN_9);
+     }
 #endif /* APP_UART_ENABLE */
 
     HAL_GPIO_TogglePin(GPIOC, GPIO_PIN_7);
@@ -222,6 +488,22 @@ int main(void)
     {
       __NOP();
     }
+    #if (APP_UART3_ENABLE)
+    //USART3 stuff:
+    int number_of_cmds = 2;
+    Check_Data(number_of_cmds);
+    if (cmd_arr[1] == 0x22) {
+     continue; 
+    }
+
+    if (number_of_cmds == 2 && new_data) 
+    {
+      Execute_Cmd();
+    }
+    // --------end of usart3 stuff--------
+    #endif
+
+
     //HAL_Delay(100000);
     
     /* USER CODE END WHILE */
@@ -471,6 +753,11 @@ static void MX_USART4_UART_Init(void)
   huart4.Init.StopBits = UART_STOPBITS_1;
   huart4.Init.Parity = UART_PARITY_NONE;
   huart4.Init.Mode = UART_MODE_TX_RX;
+  /*
+   * PA1 - USART4_RX
+   * PC10 - USART4_TX 
+   */
+
   huart4.Init.HwFlowCtl = UART_HWCONTROL_NONE;
   huart4.Init.OverSampling = UART_OVERSAMPLING_16;
   huart4.Init.OneBitSampling = UART_ONE_BIT_SAMPLE_DISABLE;
@@ -614,3 +901,14 @@ void assert_failed(uint8_t *file, uint32_t line)
   /* USER CODE END 6 */
 }
 #endif /* USE_FULL_ASSERT */
+
+
+
+
+
+
+
+
+  
+
+
