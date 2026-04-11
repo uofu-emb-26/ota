@@ -25,6 +25,8 @@
 #include "flash_update.h"
 #include "stm32f0xx_hal_rcc.h"
 #include "ota_metadata.h"
+#include <stdint.h>
+#include <sys/_intsup.h>
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
@@ -47,8 +49,9 @@
 // enable test code using macros
 
 #define APP_UART_ENABLE     0U
-#define APP_UART3_ENABLE    0U
-
+#define APP_UART3_ENABLE    1U
+#define COLOR_UART          0U
+#define PROGRAM_STORE_UART  1U
 /* Private macro -------------------------------------------------------------*/
 /* USER CODE BEGIN PM */
 
@@ -61,7 +64,13 @@ SPI_HandleTypeDef hspi2;
 TSC_HandleTypeDef htsc;
 
 #if (APP_UART3_ENABLE)
+#if (COLOR_UART)
 volatile uint8_t cmd_arr[] = {0x11,0x22};
+#endif
+#if (PROGRAM_STORE_UART)
+uint8_t cmd_arr[400];
+uint8_t cmd_arr_pointer = 0;
+#endif
 uint8_t rr_val;
 uint8_t new_data;
 uint8_t new_data_h;
@@ -158,7 +167,10 @@ void Set_Baud_Rate()
 }
 
 /* Set the selected pins into alternate function mode and program the correct alternate function
-number into the GPIO AFR registers.*/
+number into the GPIO AFR registers.
+PC4 - TX
+PC5 - RX
+*/
 void Config_Pins()
 {
   GPIOC->MODER |= GPIO_MODER_MODER4_1;
@@ -211,7 +223,7 @@ Within the handler set a global variable as a flag indicating new data.
 //   new_data_h = 1;
 // }
 
-
+#if (COLOR_UART)
 int Match_CMD_To_LED(uint8_t recieved_data, int num_of_cmds)
 {
   int flag = 1;
@@ -337,7 +349,7 @@ int Valid_Num_Cmd(uint8_t data)
   }
   return 0;
 }
-
+#endif
 
 void Check_Data(int num_of_cmds){
   /* 1. Check and wait on the USART status flag that indicates 
@@ -350,12 +362,16 @@ void Check_Data(int num_of_cmds){
     if(USART3->ISR & USART_ISR_RXNE_Msk){
       if (num_of_cmds == 1)
       {
+        #if COLOR_UART
         uint8_t recieved_data = USART3->RDR;
         flag = Match_CMD_To_LED(recieved_data, num_of_cmds);
+        #endif
       }
       else 
       {
         uint8_t recieved_data = USART3->RDR;
+        
+        #if (COLOR_UART)
         if (Valid_LED_Cmd(recieved_data)) {
           cmd_arr[0] = recieved_data;
           flag = 0;
@@ -371,9 +387,30 @@ void Check_Data(int num_of_cmds){
           Match_CMD_To_LED('d', 1);
           flag = 0;
         }
+        #endif
+
+        #if (PROGRAM_STORE_UART)
+        cmd_arr[cmd_arr_pointer] = recieved_data;
+        cmd_arr_pointer++;
+        flag = 0;
+        #endif
       }
     }
   }
+}
+
+void Parse_Program()
+{
+  HAL_GPIO_TogglePin(GPIOC, LED_GREEN_PIN);
+
+  // char* cmd_arr_string = "";
+  // char * check_string = "hello world";
+  // for (int i = 0; i < 11; i++) {
+  //   cmd_arr_string[i] = cmd_arr[i];
+  // }
+  // if (cmd_arr_string == check_string) {
+  //   HAL_GPIO_TogglePin(GPIOC, LED_GREEN_PIN);
+  // }
 }
 #endif
 /* USER CODE END 0 */
@@ -464,32 +501,33 @@ int main(void)
     #if (APP_UART_ENABLE == 1U)
     if(uart_size)
      {
-      /* returns 1 if the CRC doesn't pass */
-      int crc_flag = boot_verify_crc(recieved_data, uart_size - 4, *((uint32_t *)&recieved_data[uart_size - 4]));
+      // /* returns 1 if the CRC doesn't pass */
+      // int crc_flag = boot_verify_crc(recieved_data, uart_size - 4, *((uint32_t *)&recieved_data[uart_size - 4]));
 
-      if(crc_flag == 1)
-      {
-        //doesn't match
-        HAL_GPIO_TogglePin(GPIOC, LED_RED_PIN);
-      }
-      else
-      {
-        //match
-        HAL_GPIO_TogglePin(GPIOC, LED_GREEN_PIN);
-        // printf("message: % \n", (char*)recieved_data);
-      }
+      // if(crc_flag == 1)
+      // {
+      //   //doesn't match
+      //   HAL_GPIO_TogglePin(GPIOC, LED_RED_PIN);
+      // }
+      // else
+      // {
+      //   //match
+      //   HAL_GPIO_TogglePin(GPIOC, LED_GREEN_PIN);
+      //   // printf("message: % \n", (char*)recieved_data);
+      // }
       HAL_GPIO_TogglePin(GPIOC, GPIO_PIN_9);
      }
 #endif /* APP_UART_ENABLE */
 
-    HAL_GPIO_TogglePin(GPIOC, GPIO_PIN_7);
-    HAL_GPIO_TogglePin(GPIOC, GPIO_PIN_8);
-    for (volatile uint32_t i = 0; i < 10000000; i++) 
-    {
-      __NOP();
-    }
+    // HAL_GPIO_TogglePin(GPIOC, GPIO_PIN_7);
+    // HAL_GPIO_TogglePin(GPIOC, GPIO_PIN_8);
+    // for (volatile uint32_t i = 0; i < 10000000; i++) 
+    // {
+    //   __NOP();
+    // }
     #if (APP_UART3_ENABLE)
     //USART3 stuff:
+    #if (COLOR_UART)
     int number_of_cmds = 2;
     Check_Data(number_of_cmds);
     if (cmd_arr[1] == 0x22) {
@@ -500,6 +538,14 @@ int main(void)
     {
       Execute_Cmd();
     }
+    #endif
+    #if (PROGRAM_STORE_UART)
+    Check_Data(2);
+    if (cmd_arr_pointer > 11)
+    {
+      Parse_Program();  
+    }
+    #endif
     // --------end of usart3 stuff--------
     #endif
 
@@ -748,7 +794,7 @@ static void MX_USART4_UART_Init(void)
 
   /* USER CODE END USART4_Init 1 */
   huart4.Instance = USART4;
-  huart4.Init.BaudRate = 38400;
+  huart4.Init.BaudRate = 115200;
   huart4.Init.WordLength = UART_WORDLENGTH_8B;
   huart4.Init.StopBits = UART_STOPBITS_1;
   huart4.Init.Parity = UART_PARITY_NONE;

@@ -161,6 +161,7 @@ void bootloader_jump_to_app(uint32_t slot_base)
 
     __DSB();
     __ISB();
+    __enable_irq();
 
     /* 3. Set MSP and branch – use the reset vector stored in the
      *    now-updated SRAM mirror so the Thumb bit is preserved. */
