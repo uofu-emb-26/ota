@@ -1,25 +1,52 @@
 {
-	"version": "2.0.0",
-	"tasks": [
-		{
-			"type": "cmake",
-			"label": "CMake: clean",
-			"command": "clean",
-			"preset": "Debug",
-			"problemMatcher": [],
-			"detail": "CMake template clean task"
-		},
-		{
-			"type": "cmake",
-			"label": "CMake: build",
-			"command": "build",
-			"targets": [
-				"all"
-			],
-			"preset": "Debug",
-			"group": "build",
-			"problemMatcher": [],
-			"detail": "CMake template build task"
-		}
-	]
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "Build All Targets",
+            "type": "shell",
+            "command": "cube-cmake",
+            "args": [
+                "--build",
+                "${workspaceFolder}/build/Debug",
+                "--"
+            ],
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            },
+            "problemMatcher": [
+                "$gcc"
+            ]
+        },
+        {
+            "label": "Flash Bootloader",
+            "type": "shell",
+            "command": "cube-cmake",
+            "args": [
+                "--build", "${workspaceFolder}/build/Debug", "--target", "flash_OTA_bootloader", "--"
+            ]
+        },
+        {
+            "label": "Flash App A",
+            "type": "shell",
+            "command": "cube-cmake",
+            "args": [
+                "--build", "${workspaceFolder}/build/Debug", "--target", "flash_OTA_app_a", "--"
+            ]
+        },
+        {
+            "label": "Flash App B",
+            "type": "shell",
+            "command": "cube-cmake",
+            "args": [
+                "--build", "${workspaceFolder}/build/Debug", "--target", "flash_OTA_app_b", "--"
+            ]
+        },
+        {
+            "label": "Flash All Targets",
+            "dependsOn": ["Flash Bootloader", "Flash App A", "Flash App B"],
+            "dependsOrder": "sequence",
+            "problemMatcher": []
+        }
+    ]
 }

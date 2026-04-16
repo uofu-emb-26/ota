@@ -25,6 +25,10 @@
 #include "flash_update.h"
 #include "stm32f0xx_hal_rcc.h"
 #include "ota_metadata.h"
+#include "ota_app_helper.h"
+#include "uart_debug.h"
+#include "led.h"
+
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
@@ -38,15 +42,15 @@
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
-#define LED_RED_PIN     GPIO_PIN_6
-#define LED_BLUE_PIN    GPIO_PIN_7
-#define LED_ORANGE_PIN  GPIO_PIN_8
-#define LED_GREEN_PIN   GPIO_PIN_9
 
 /* USER CODE END PD */
 // enable test code using macros
 
 #define APP_UART_ENABLE    0U
+
+#ifndef FIRMWARE_VERSION
+#define FIRMWARE_VERSION   0U
+#endif
 
 /* Private macro -------------------------------------------------------------*/
 /* USER CODE BEGIN PM */
@@ -163,16 +167,9 @@ int main(void)
   #if (APP_UART_ENABLE == 1U)
   MX_USART4_UART_Init();
   #endif /* APP_UART_ENABLE */
-  /* USER CODE BEGIN 2 */
+  /* USER CODE BEGIN 2 */  
 
-  __HAL_RCC_GPIOA_CLK_ENABLE();
-  __HAL_RCC_GPIOC_CLK_ENABLE();
-
-  GPIO_InitTypeDef initStr1 = {
-      GPIO_PIN_6 | GPIO_PIN_7 | GPIO_PIN_8 | GPIO_PIN_9, // LEDs
-      GPIO_MODE_OUTPUT_PP, GPIO_NOPULL, GPIO_SPEED_FREQ_LOW};
-
-  HAL_GPIO_Init(GPIOC, &initStr1);
+  led_init();
 
   /*GPIO_InitTypeDef initStr2 = {GPIO_PIN_0, //Pushbutton
                               GPIO_MODE_INPUT,
@@ -187,10 +184,28 @@ int main(void)
 
   /* Confirm this slot is healthy – clears trial-boot counter in metadata.
    * Move this call later (after connectivity/sensor checks) for a real app. */
+  ota_update_running_slot_version((uint32_t)FIRMWARE_VERSION);
   ota_confirm_current_slot();
 
+  uint8_t current_slot = get_current_slot();
+
+  uart_debug_init();
+#if defined(OTA_APP_SLOT_A)
+  uart_debug_transmit("[OTA] App A running\r\n");
+#elif defined(OTA_APP_SLOT_B)
+  uart_debug_transmit("[OTA] App B running\r\n");
+#else
+  uart_debug_transmit("[OTA] App running (slot unknown)\r\n");
+#endif
+  (void)current_slot;
 
   #if (APP_UART_ENABLE == 1U)
+  if (current_slot == OTA_SLOT_A) {
+    HAL_UART_Transmit(&huart4, (uint8_t *)"App running in Slot A\r\n", 23U, 100U);
+  } else if (current_slot == OTA_SLOT_B) {
+    HAL_UART_Transmit(&huart4, (uint8_t *)"App running in Slot B\r\n", 23U, 100U);
+  }
+
   HAL_UARTEx_ReceiveToIdle_DMA(&huart4, recieved_data, sizeof(recieved_data));
   #endif /* APP_UART_ENABLE */
 
@@ -219,10 +234,7 @@ int main(void)
       }
     }
 #endif /* APP_UART_ENABLE */
-
-    HAL_GPIO_TogglePin(GPIOC, GPIO_PIN_7);
-    HAL_GPIO_TogglePin(GPIOC, GPIO_PIN_8);
-    HAL_Delay(250);
+    led_counterclockwise(150U);
     
     /* USER CODE END WHILE */
 

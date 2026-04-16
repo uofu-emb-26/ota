@@ -8,7 +8,7 @@
 /* ---------------------------------------------------------------------------
  * Persistent boot-state record stored in the dedicated metadata flash page.
  *
- * Layout is packed so sizeof(ota_metadata_t) == 36 bytes regardless of
+ * Layout is packed so sizeof(ota_metadata_t) == 44 bytes regardless of
  * compiler padding.  The metadata_crc field covers all preceding bytes:
  *   ota_metadata_crc(meta) == crc32(meta, offsetof(metadata_crc))
  * -------------------------------------------------------------------------*/
@@ -27,9 +27,11 @@ typedef struct __attribute__((packed)) {
     uint32_t slot_a_crc;        /* CRC32 of the entire Slot A image           */
     uint32_t slot_b_crc;        /* CRC32 of the entire Slot B image           */
     uint32_t sequence;          /* Monotonic counter – incremented each write */
+    uint32_t fw_version_a;      /* Monotonic firmware version for Slot A      */
+    uint32_t fw_version_b;      /* Monotonic firmware version for Slot B      */
     uint32_t metadata_crc;      /* CRC32 of all bytes above this field        */
 } ota_metadata_t;
-/* static_assert: sizeof == 36 is checked in ota_metadata.c */
+/* static_assert: sizeof == 44 is checked in ota_metadata.c */
 
 typedef enum {
     OTA_META_OK         = 0,
@@ -65,5 +67,8 @@ uint32_t          ota_crc32(const uint8_t *data, uint32_t len);
  * roll back to the previously confirmed slot on the next reset.
  * -------------------------------------------------------------------------*/
 ota_meta_result_t ota_confirm_current_slot(void);
+
+/* Update metadata with the running slot's firmware version. */
+ota_meta_result_t ota_update_running_slot_version(uint32_t fw_version);
 
 #endif /* OTA_METADATA_H */

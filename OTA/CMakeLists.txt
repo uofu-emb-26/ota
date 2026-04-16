@@ -51,7 +51,10 @@ set(OTA_APP_COMMON_SOURCES
     Core/Src/common/syscalls.c
     Core/Src/common/flash_update.c
     Core/Src/common/ota_metadata.c
+    Core/Src/common/uart_debug.c
     Core/Src/app/hal_gpio.c
+    Core/Src/common/sysmem.c
+    Core/Src/common/led.c
 )
 
 add_executable(OTA_app_a ${OTA_APP_COMMON_SOURCES})
@@ -61,6 +64,7 @@ target_link_libraries(OTA_app_a
     m
 )
 target_compile_definitions(OTA_app_a PRIVATE OTA_APP_SLOT_A=1)
+target_compile_definitions(OTA_app_a PRIVATE FIRMWARE_VERSION=100)
 target_link_options(OTA_app_a PRIVATE
     -T "${CMAKE_SOURCE_DIR}/STM32F072_APP_A.ld"
     -Wl,-Map=OTA_app_a.map
@@ -78,6 +82,7 @@ target_link_libraries(OTA_app_b
     m
 )
 target_compile_definitions(OTA_app_b PRIVATE OTA_APP_SLOT_B=1)
+target_compile_definitions(OTA_app_b PRIVATE FIRMWARE_VERSION=101)
 target_link_options(OTA_app_b PRIVATE
     -T "${CMAKE_SOURCE_DIR}/STM32F072_APP_B.ld"
     -Wl,-Map=OTA_app_b.map
@@ -95,11 +100,13 @@ add_executable(OTA_bootloader
     startup_stm32f072xb.s
     Core/Src/common/flash_update.c
     Core/Src/common/ota_metadata.c
+    Core/Src/common/uart_debug.c
     Core/Src/boot/bootloader.c
     Core/Src/boot/bootloader_main.c
     Core/Src/boot/bootloader_it.c
     Core/Src/common/syscalls.c
     Core/Src/common/sysmem.c
+    Core/Src/common/led.c
 )
 
 target_link_libraries(OTA_bootloader
@@ -112,6 +119,12 @@ target_link_options(OTA_bootloader PRIVATE
     -T "${CMAKE_SOURCE_DIR}/STM32F072_BOOTLOADER.ld"
     -Wl,-Map=OTA_bootloader.map
     -Wl,--print-memory-usage
+)
+
+target_compile_definitions(OTA_bootloader PRIVATE
+    FIRMWARE_VERSION=1
+    OTA_APP_A_VERSION=105
+    OTA_APP_B_VERSION=103
 )
 
 set_target_properties(OTA_bootloader PROPERTIES

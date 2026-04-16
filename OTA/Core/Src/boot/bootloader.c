@@ -4,6 +4,33 @@
 #include "stm32f0xx_hal.h"
 #include <string.h>
 
+#ifndef OTA_APP_A_VERSION
+#define OTA_APP_A_VERSION 0U
+#endif
+
+#ifndef OTA_APP_B_VERSION
+#define OTA_APP_B_VERSION 0U
+#endif
+
+static uint8_t boot_slot_vector_is_valid(uint32_t slot_base)
+{
+    const uint32_t *app_vectors = (const uint32_t *)slot_base;
+    uint32_t app_sp = app_vectors[0];
+    uint32_t slot_size = (slot_base == OTA_SLOT_A_START) ? OTA_SLOT_A_SIZE
+                                                          : OTA_SLOT_B_SIZE;
+    uint32_t app_reset = app_vectors[1] & ~1U;
+
+    if (app_sp < 0x20000000U || app_sp > OTA_APP_RAM_END) {
+        return 0U;
+    }
+
+    if (app_reset < slot_base || app_reset >= slot_base + slot_size) {
+        return 0U;
+    }
+
+    return 1U;
+}
+
 /* --------------------------------------------------------------------------
  * bootloader_select_slot
  *
@@ -37,6 +64,14 @@ uint8_t bootloader_select_slot(const ota_metadata_t *meta)
         return OTA_SLOT_NONE;
     }
 
+    /* If no pending image is being trial-booted, prefer the newest valid image. */
+    if (meta->pending_slot == OTA_SLOT_NONE && a_valid && b_valid) {
+        if (meta->fw_version_b > meta->fw_version_a) {
+            return OTA_SLOT_B;
+        }
+        return OTA_SLOT_A;
+    }
+
     /* Normal path: prefer pending, then active */
     uint8_t candidate = (meta->pending_slot != OTA_SLOT_NONE)
                         ? meta->pending_slot
@@ -62,6 +97,37 @@ boot_result_t bootloader_run(void)
 {
     ota_metadata_t meta;
     ota_metadata_read(&meta);   /* always returns a usable struct */
+
+    uint8_t meta_changed = 0U;
+    uint8_t slot_a_present = boot_slot_vector_is_valid(OTA_SLOT_A_START);
+    uint8_t slot_b_present = boot_slot_vector_is_valid(OTA_SLOT_B_START);
+
+    if (slot_a_present) {
+        if ((meta.slot_a_flags & OTA_FLAG_VALID) == 0U) {
+            meta.slot_a_flags |= OTA_FLAG_VALID;
+            meta_changed = 1U;
+        }
+        if (meta.fw_version_a != (uint32_t)OTA_APP_A_VERSION) {
+            meta.fw_version_a = (uint32_t)OTA_APP_A_VERSION;
+            meta_changed = 1U;
+        }
+    }
+
+    if (slot_b_present) {
+        if ((meta.slot_b_flags & OTA_FLAG_VALID) == 0U) {
+            meta.slot_b_flags |= OTA_FLAG_VALID;
+            meta_changed = 1U;
+        }
+        if (meta.fw_version_b != (uint32_t)OTA_APP_B_VERSION) {
+            meta.fw_version_b = (uint32_t)OTA_APP_B_VERSION;
+            meta_changed = 1U;
+        }
+    }
+
+    if (meta_changed != 0U) {
+        meta.sequence++;
+        ota_metadata_write(&meta);
+    }
 
     uint8_t slot = bootloader_select_slot(&meta);
     if (slot == OTA_SLOT_NONE) {
