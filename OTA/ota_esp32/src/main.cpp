@@ -39,6 +39,12 @@ void setup() {
   server.on("/flash", handleFlash);
   server.on("/send", handleSend);
   server.begin();
+
+  //void loop is called here so it's acutally doing:
+  /* 
+  void loop() {
+    server.handleClient();
+  }*/
 }
 
 void loop() {
