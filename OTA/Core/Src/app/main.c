@@ -46,7 +46,7 @@
 /* USER CODE END PD */
 // enable test code using macros
 
-#define APP_UART_ENABLE    0U
+#define DEBUG_UART_ENABLE    1U
 
 #ifndef FIRMWARE_VERSION
 #define FIRMWARE_VERSION   0U
@@ -66,15 +66,17 @@ SPI_HandleTypeDef hspi2;
 
 TSC_HandleTypeDef htsc;
 
-#if (APP_UART_ENABLE == 1U)
+#if (DEBUG_UART_ENABLE == 1U)
   UART_HandleTypeDef huart4;
+  #if 0
   DMA_HandleTypeDef hdma_usart4_rx;
   DMA_HandleTypeDef hdma_usart4_tx;
 
   uint8_t recieved_data[400];
   static uint16_t uart_size;
   char application_message[] = "Hello from application 1!";
-#endif /* APP_UART_ENABLE */
+  #endif /* 0 */
+#endif /* DEBUG_UART_ENABLE */
 
 PCD_HandleTypeDef hpcd_USB_FS;
 /* USER CODE BEGIN PV */
@@ -90,22 +92,23 @@ static void MX_SPI2_Init(void);
 static void MX_TSC_Init(void);
 static void MX_USB_PCD_Init(void);
 static void MX_CRC_Init(void);
-#if (APP_UART_ENABLE == 1U)
-static void MX_USART4_UART_Init(void);
-#endif /* APP_UART_ENABLE */
+#if (DEBUG_UART_ENABLE == 1U)
+//static void MX_USART4_UART_Init(void);
+#endif /* DEBUG_UART_ENABLE */
 /* USER CODE BEGIN PFP */
 
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
-#if (APP_UART_ENABLE == 1U)
-void HAL_UARTEx_RxEventCallback(UART_HandleTypeDef *huart, uint16_t Size)
-{
-  uart_size = Size;
-  HAL_UARTEx_ReceiveToIdle_DMA(&huart4, recieved_data, sizeof(recieved_data));
-}
-#endif /* APP_UART_ENABLE */
+// DMA on UART4 not required currently.
+
+// void HAL_UARTEx_RxEventCallback(UART_HandleTypeDef *huart, uint16_t Size)
+// {
+//   uart_size = Size;
+//   HAL_UARTEx_ReceiveToIdle_DMA(&huart4, recieved_data, sizeof(recieved_data));
+// }
+
 
 
 uint8_t boot_verify_crc(uint8_t *data, uint8_t len, uint32_t crc_host)
@@ -164,9 +167,10 @@ int main(void)
   MX_TSC_Init();
   MX_USB_PCD_Init();
   MX_CRC_Init();
-  #if (APP_UART_ENABLE == 1U)
-  MX_USART4_UART_Init();
-  #endif /* APP_UART_ENABLE */
+  #if (DEBUG_UART_ENABLE == 1U)
+  //MX_USART4_UART_Init();
+  uart_debug_init(); //USART4
+#endif /* DEBUG_UART_ENABLE */
   /* USER CODE BEGIN 2 */  
 
   led_init();
@@ -189,7 +193,6 @@ int main(void)
 
   uint8_t current_slot = get_current_slot();
 
-  uart_debug_init();
 #if defined(OTA_APP_SLOT_A)
   uart_debug_transmit("[OTA] App A running\r\n");
 #elif defined(OTA_APP_SLOT_B)
@@ -197,17 +200,18 @@ int main(void)
 #else
   uart_debug_transmit("[OTA] App running (slot unknown)\r\n");
 #endif
+
   (void)current_slot;
 
-  #if (APP_UART_ENABLE == 1U)
+  #if (DEBUG_UART_ENABLE == 1U)
   if (current_slot == OTA_SLOT_A) {
     HAL_UART_Transmit(&huart4, (uint8_t *)"App running in Slot A\r\n", 23U, 100U);
   } else if (current_slot == OTA_SLOT_B) {
     HAL_UART_Transmit(&huart4, (uint8_t *)"App running in Slot B\r\n", 23U, 100U);
   }
 
-  HAL_UARTEx_ReceiveToIdle_DMA(&huart4, recieved_data, sizeof(recieved_data));
-  #endif /* APP_UART_ENABLE */
+  //HAL_UARTEx_ReceiveToIdle_DMA(&huart4, recieved_data, sizeof(recieved_data));
+  #endif /* DEBUG_UART_ENABLE */
 
   /* USER CODE END 2 */
   //HAL_GPIO_WritePin(GPIOC, LED_BLUE_PIN, GPIO_PIN_SET);
@@ -215,27 +219,26 @@ int main(void)
   /* USER CODE BEGIN WHILE */
   while (1)
   {
-    #if (APP_UART_ENABLE == 1U)
-    if(uart_size)
-    {
+#if 0
+    if (uart_size) {
       /* returns 1 if the CRC doesn't pass */
-      int crc_flag = boot_verify_crc(recieved_data, uart_size - 4, *((uint32_t *)&recieved_data[uart_size - 4]));
+      int crc_flag =
+          boot_verify_crc(recieved_data, uart_size - 4,
+                          *((uint32_t *)&recieved_data[uart_size - 4]));
 
-      if(crc_flag == 1)
-      {
-        //doesn't match
+      if (crc_flag == 1) {
+        // doesn't match
         HAL_GPIO_TogglePin(GPIOC, LED_RED_PIN);
-      }
-      else
-      {
-        //match
+      } else {
+        // match
         HAL_GPIO_TogglePin(GPIOC, LED_GREEN_PIN);
         // printf("message: % \n", (char*)recieved_data);
       }
     }
-#endif /* APP_UART_ENABLE */
+#endif /* 0 */
+
     led_counterclockwise(150U);
-    
+    //led_clockwise(150U);
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
@@ -461,7 +464,7 @@ static void MX_TSC_Init(void)
 
 }
 
-#if (APP_UART_ENABLE == 1U)
+#if 0
 /**
   * @brief USART4 Initialization Function
   * @param None
@@ -496,7 +499,8 @@ static void MX_USART4_UART_Init(void)
   /* USER CODE END USART4_Init 2 */
 
 }
-#endif /* APP_UART_ENABLE */
+#endif /* 0 */
+
 /**
   * @brief USB Initialization Function
   * @param None

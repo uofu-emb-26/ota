@@ -55,11 +55,11 @@
 /* USER CODE END 0 */
 
 /* External variables --------------------------------------------------------*/
-#if (APP_UART_ENABLE == 1U)
+#if (DEBUG_UART_ENABLE == 1U)
 extern DMA_HandleTypeDef hdma_usart4_rx;
 extern DMA_HandleTypeDef hdma_usart4_tx;
 extern UART_HandleTypeDef huart4;
-#endif /* APP_UART_ENABLE */
+#endif /* DEBUG_UART_ENABLE */
 /* USER CODE BEGIN EV */
 
 /* USER CODE END EV */

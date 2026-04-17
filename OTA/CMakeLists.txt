@@ -72,7 +72,7 @@ target_link_options(OTA_app_a PRIVATE
 )
 set_target_properties(OTA_app_a PROPERTIES
     LINK_DEPENDS "${CMAKE_SOURCE_DIR}/STM32F072_APP_A.ld"
-    ADDITIONAL_CLEAN_FILES "OTA_app_a.map;OTA_app_a.hex"
+    ADDITIONAL_CLEAN_FILES "OTA_app_a.map;OTA_app_a.hex;OTA_app_a.bin"
 )
 
 add_executable(OTA_app_b ${OTA_APP_COMMON_SOURCES})
@@ -90,7 +90,7 @@ target_link_options(OTA_app_b PRIVATE
 )
 set_target_properties(OTA_app_b PROPERTIES
     LINK_DEPENDS "${CMAKE_SOURCE_DIR}/STM32F072_APP_B.ld"
-    ADDITIONAL_CLEAN_FILES "OTA_app_b.map;OTA_app_b.hex"
+    ADDITIONAL_CLEAN_FILES "OTA_app_b.map;OTA_app_b.hex;OTA_app_b.bin"
 )
 
 # ---------------------------------------------------------------------------
@@ -129,21 +129,37 @@ target_compile_definitions(OTA_bootloader PRIVATE
 
 set_target_properties(OTA_bootloader PROPERTIES
     LINK_DEPENDS "${CMAKE_SOURCE_DIR}/STM32F072_BOOTLOADER.ld"
-    ADDITIONAL_CLEAN_FILES "OTA_bootloader.map"
+    ADDITIONAL_CLEAN_FILES "OTA_bootloader.map;OTA_bootloader.bin;OTA_bootloader.hex"
 )
 
+# ---------------------------------------------------------------------------
+# Additional build steps to generate .hex and .bin files for the applications
+# ---------------------------------------------------------------------------
 add_custom_command(TARGET OTA_app_a POST_BUILD
     COMMAND arm-none-eabi-objcopy -O ihex
     $<TARGET_FILE:OTA_app_a>
     ${CMAKE_CURRENT_BINARY_DIR}/OTA_app_a.hex
     COMMENT "Generating OTA_app_a.hex"
 )
-
 add_custom_command(TARGET OTA_app_b POST_BUILD
     COMMAND arm-none-eabi-objcopy -O ihex
     $<TARGET_FILE:OTA_app_b>
     ${CMAKE_CURRENT_BINARY_DIR}/OTA_app_b.hex
     COMMENT "Generating OTA_app_b.hex"
+)
+
+
+add_custom_command(TARGET OTA_app_a POST_BUILD
+    COMMAND arm-none-eabi-objcopy -O binary
+    $<TARGET_FILE:OTA_app_a>
+    ${CMAKE_CURRENT_BINARY_DIR}/OTA_app_a.bin
+    COMMENT "Generating OTA_app_a.bin"
+)
+add_custom_command(TARGET OTA_app_b POST_BUILD
+    COMMAND arm-none-eabi-objcopy -O binary
+    $<TARGET_FILE:OTA_app_b>
+    ${CMAKE_CURRENT_BINARY_DIR}/OTA_app_b.bin
+    COMMENT "Generating OTA_app_b.bin"
 )
 
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
