@@ -1,6 +1,8 @@
 #ifndef UART_DEBUG_H
 #define UART_DEBUG_H
 
+#define DEBUG_UART_ENABLE    1U
+
 /**
  * @brief  Initialise USART4 TX for debug output.
  *         Pin: PA0 = USART4_TX (AF4), 115200 baud, 8N1, TX-only, polling.

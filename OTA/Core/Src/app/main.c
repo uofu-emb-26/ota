@@ -47,8 +47,6 @@
 /* USER CODE END PD */
 // enable test code using macros
 
-#define DEBUG_UART_ENABLE    1U
-
 #ifndef FIRMWARE_VERSION
 #define FIRMWARE_VERSION   0U
 #endif
@@ -195,19 +193,20 @@ int main(void)
   uint8_t dormant_slot = get_dormant_slot();
   const ota_image_info_t *image_info = ota_get_running_image_info();
 
+  uart_debug_transmit("App running in Slot ");
   if (current_slot == OTA_SLOT_A) {
-    uart_debug_transmit("[OTA] App running in Slot A\r\n");
+    uart_debug_transmit("A\r\n");
   } else if (current_slot == OTA_SLOT_B) {
-    uart_debug_transmit("[OTA] App running in Slot B\r\n");
+    uart_debug_transmit("B\r\n");
   } else {
-    uart_debug_transmit("[OTA] App running (slot unknown)\r\n");
+    uart_debug_transmit("unknown\r\n");
   }
 
   (void)current_slot;
   (void)dormant_slot;
   (void)image_info;
 
-  #if (DEBUG_UART_ENABLE == 1U)
+#if (DEBUG_UART_ENABLE == 1U)
   //HAL_UARTEx_ReceiveToIdle_DMA(&huart4, recieved_data, sizeof(recieved_data));
   #endif /* DEBUG_UART_ENABLE */
 

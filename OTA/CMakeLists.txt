@@ -8,6 +8,7 @@ cmake_minimum_required(VERSION 3.22)
 #
 
 # Setup compiler settings
+set(OTA_APP_FIRMWARE_VERSION 102)
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)
 set(CMAKE_C_EXTENSIONS ON)
@@ -38,8 +39,6 @@ add_subdirectory(cmake/stm32cubemx)
 
 # Remove wrong libob.a library dependency when using cpp files
 list(REMOVE_ITEM CMAKE_C_IMPLICIT_LINK_LIBRARIES ob)
-
-set(OTA_APP_FIRMWARE_VERSION 100)
 
 # ---------------------------------------------------------------------------
 # Slot-specific application targets

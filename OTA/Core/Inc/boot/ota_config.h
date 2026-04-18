@@ -50,7 +50,7 @@
  * so the bootloader can inspect a slot without any metadata help. */
 #define OTA_IMAGE_INFO_OFFSET       OTA_VECTOR_TABLE_SIZE
 #define OTA_IMAGE_INFO_CRC_NONE     0x00000000U
-#define OTA_IMAGE_INFO_MAGIC        0x4F544149U     /* 'OTAI' */
+#define OTA_IMAGE_INFO_MAGIC        0x534A4E41U     /* 'SJNA' - Sameeran, Jeff, Nick, Anthony */
 #define OTA_IMAGE_INFO_FORMAT_VER   0x0001U
 
 #define OTA_APP_RAM_ORIGIN          0x20000100U     /* first usable RAM byte */

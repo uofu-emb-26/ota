@@ -30,7 +30,7 @@ int main(void)
     bl_clock_init();
 
     uart_debug_init();
-    uart_debug_transmit("[OTA] Bootloader running\r\n");
+    uart_debug_transmit("**** RESET, in Bootloader ****\r\n");
     led_init();
     led_on();
     HAL_Delay(150U); //use of blocking delay is acceptable here since the bootloader does not have real-time constraints
