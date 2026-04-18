@@ -23,6 +23,7 @@
 #include "stm32f0xx_hal.h"
 #include "stm32f0xx_hal_gpio.h"
 #include "flash_update.h"
+#include "ota_image_info.h"
 #include "stm32f0xx_hal_rcc.h"
 #include "ota_metadata.h"
 #include "ota_app_helper.h"
@@ -188,28 +189,25 @@ int main(void)
 
   /* Confirm this slot is healthy – clears trial-boot counter in metadata.
    * Move this call later (after connectivity/sensor checks) for a real app. */
-  ota_update_running_slot_version((uint32_t)FIRMWARE_VERSION);
   ota_confirm_current_slot();
 
   uint8_t current_slot = get_current_slot();
+  uint8_t dormant_slot = get_dormant_slot();
+  const ota_image_info_t *image_info = ota_get_running_image_info();
 
-#if defined(OTA_APP_SLOT_A)
-  uart_debug_transmit("[OTA] App A running\r\n");
-#elif defined(OTA_APP_SLOT_B)
-  uart_debug_transmit("[OTA] App B running\r\n");
-#else
-  uart_debug_transmit("[OTA] App running (slot unknown)\r\n");
-#endif
-
-  (void)current_slot;
-
-  #if (DEBUG_UART_ENABLE == 1U)
   if (current_slot == OTA_SLOT_A) {
-    HAL_UART_Transmit(&huart4, (uint8_t *)"App running in Slot A\r\n", 23U, 100U);
+    uart_debug_transmit("[OTA] App running in Slot A\r\n");
   } else if (current_slot == OTA_SLOT_B) {
-    HAL_UART_Transmit(&huart4, (uint8_t *)"App running in Slot B\r\n", 23U, 100U);
+    uart_debug_transmit("[OTA] App running in Slot B\r\n");
+  } else {
+    uart_debug_transmit("[OTA] App running (slot unknown)\r\n");
   }
 
+  (void)current_slot;
+  (void)dormant_slot;
+  (void)image_info;
+
+  #if (DEBUG_UART_ENABLE == 1U)
   //HAL_UARTEx_ReceiveToIdle_DMA(&huart4, recieved_data, sizeof(recieved_data));
   #endif /* DEBUG_UART_ENABLE */
 

@@ -19,4 +19,18 @@ static inline uint8_t get_current_slot(void)
     return OTA_SLOT_NONE;
 }
 
+static inline uint8_t get_dormant_slot(void)
+{
+    uint8_t current_slot = get_current_slot();
+
+    if (current_slot == OTA_SLOT_A) {
+        return OTA_SLOT_B;
+    }
+    if (current_slot == OTA_SLOT_B) {
+        return OTA_SLOT_A;
+    }
+
+    return OTA_SLOT_NONE;
+}
+
 #endif /* OTA_APP_HELPER_H */

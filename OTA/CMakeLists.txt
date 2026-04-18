@@ -39,6 +39,8 @@ add_subdirectory(cmake/stm32cubemx)
 # Remove wrong libob.a library dependency when using cpp files
 list(REMOVE_ITEM CMAKE_C_IMPLICIT_LINK_LIBRARIES ob)
 
+set(OTA_APP_FIRMWARE_VERSION 100)
+
 # ---------------------------------------------------------------------------
 # Slot-specific application targets
 # ---------------------------------------------------------------------------
@@ -50,6 +52,7 @@ set(OTA_APP_COMMON_SOURCES
     Core/Src/common/sysmem.c
     Core/Src/common/syscalls.c
     Core/Src/common/flash_update.c
+    Core/Src/common/ota_image_info.c
     Core/Src/common/ota_metadata.c
     Core/Src/common/uart_debug.c
     Core/Src/app/hal_gpio.c
@@ -63,8 +66,7 @@ target_link_libraries(OTA_app_a
     STM32_Drivers
     m
 )
-target_compile_definitions(OTA_app_a PRIVATE OTA_APP_SLOT_A=1)
-target_compile_definitions(OTA_app_a PRIVATE FIRMWARE_VERSION=100)
+target_compile_definitions(OTA_app_a PRIVATE FIRMWARE_VERSION=${OTA_APP_FIRMWARE_VERSION})
 target_link_options(OTA_app_a PRIVATE
     -T "${CMAKE_SOURCE_DIR}/STM32F072_APP_A.ld"
     -Wl,-Map=OTA_app_a.map
@@ -81,8 +83,7 @@ target_link_libraries(OTA_app_b
     STM32_Drivers
     m
 )
-target_compile_definitions(OTA_app_b PRIVATE OTA_APP_SLOT_B=1)
-target_compile_definitions(OTA_app_b PRIVATE FIRMWARE_VERSION=101)
+target_compile_definitions(OTA_app_b PRIVATE FIRMWARE_VERSION=${OTA_APP_FIRMWARE_VERSION})
 target_link_options(OTA_app_b PRIVATE
     -T "${CMAKE_SOURCE_DIR}/STM32F072_APP_B.ld"
     -Wl,-Map=OTA_app_b.map
@@ -123,8 +124,6 @@ target_link_options(OTA_bootloader PRIVATE
 
 target_compile_definitions(OTA_bootloader PRIVATE
     FIRMWARE_VERSION=1
-    OTA_APP_A_VERSION=105
-    OTA_APP_B_VERSION=103
 )
 
 set_target_properties(OTA_bootloader PROPERTIES
@@ -167,3 +166,4 @@ include(flash_stm32)
 flash_target(OTA_bootloader)
 flash_target(OTA_app_a)
 flash_target(OTA_app_b)
+erase_flash_target()

@@ -3,7 +3,7 @@
 #include <string.h>
 
 /* Compile-time layout check */
-typedef char _check_metadata_size[(sizeof(ota_metadata_t) == 44U) ? 1 : -1];
+typedef char _check_metadata_size[(sizeof(ota_metadata_t) == 20U) ? 1 : -1];
 
 /* --------------------------------------------------------------------------
  * CRC-32 (IEEE 802.3, reflected polynomial 0xEDB88320)
@@ -78,8 +78,6 @@ void ota_metadata_init_default(ota_metadata_t *meta)
     meta->slot_a_flags   = OTA_FLAG_VALID | OTA_FLAG_CONFIRMED;
     meta->slot_b_flags   = 0U;
     meta->sequence       = 0U;
-    meta->fw_version_a   = 0U;
-    meta->fw_version_b   = 0U;
     meta->trial_boot_count = 0U;
     meta->metadata_crc   = ota_metadata_crc(meta);
 }
@@ -182,8 +180,9 @@ ota_meta_result_t ota_confirm_current_slot(void)
     ota_metadata_read(&meta);   /* always populates meta with a usable struct */
 
     if (meta.confirmed_slot == running_slot &&
+        meta.pending_slot != running_slot &&
         (meta.trial_boot_count == 0U)) {
-        /* Already confirmed – nothing to write */
+        /* Already confirmed; preserve any staged update for the other slot */
         return OTA_META_OK;
     }
 
@@ -194,6 +193,7 @@ ota_meta_result_t ota_confirm_current_slot(void)
         meta.slot_b_flags |= OTA_FLAG_CONFIRMED;
     }
     meta.confirmed_slot   = running_slot;
+    meta.active_slot      = running_slot;
     meta.pending_slot     = OTA_SLOT_NONE;
     meta.trial_boot_count = 0U;
     meta.sequence++;
@@ -201,38 +201,22 @@ ota_meta_result_t ota_confirm_current_slot(void)
     return ota_metadata_write(&meta);
 }
 
-ota_meta_result_t ota_update_running_slot_version(uint32_t fw_version)
+ota_meta_result_t ota_mark_slot_pending(uint8_t slot_id)
 {
-    uint32_t this_fn = (uint32_t)ota_update_running_slot_version;
-    uint8_t running_slot;
-
-    if (this_fn >= OTA_SLOT_A_START &&
-        this_fn <  OTA_SLOT_A_START + OTA_SLOT_A_SIZE) {
-        running_slot = OTA_SLOT_A;
-    } else if (this_fn >= OTA_SLOT_B_START &&
-               this_fn <  OTA_SLOT_B_START + OTA_SLOT_B_SIZE) {
-        running_slot = OTA_SLOT_B;
-    } else {
-        return OTA_META_OK;
+    if (slot_id != OTA_SLOT_A && slot_id != OTA_SLOT_B) {
+        return OTA_META_ERR_PARAM;
     }
 
     ota_metadata_t meta;
     ota_metadata_read(&meta);
 
-    if (running_slot == OTA_SLOT_A) {
-        if (meta.fw_version_a == fw_version) {
-            return OTA_META_OK;
-        }
-        meta.fw_version_a = fw_version;
-        meta.slot_a_flags |= OTA_FLAG_VALID;
-    } else {
-        if (meta.fw_version_b == fw_version) {
-            return OTA_META_OK;
-        }
-        meta.fw_version_b = fw_version;
-        meta.slot_b_flags |= OTA_FLAG_VALID;
+    if (meta.pending_slot == slot_id && meta.trial_boot_count == 0U) {
+        return OTA_META_OK;
     }
 
+    meta.pending_slot = slot_id;
+    meta.trial_boot_count = 0U;
     meta.sequence++;
+
     return ota_metadata_write(&meta);
 }
