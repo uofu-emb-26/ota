@@ -24,3 +24,11 @@ openocd -f interface/stlink.cfg -f target/stm32f0x.cfg -c 'program "build/Debug/
 # Flash Application B
 openocd -f interface/stlink.cfg -f target/stm32f0x.cfg -c 'program "build/Debug/OTA_app_b.elf" verify reset exit'
 
+# kill openocd
+pkill -f openocd
+
+# Erase flash (if needed)
+cube-cmake --build build/Debug --target erase_flash --
+or
+cube programmer -c port=SWD -e all
+
