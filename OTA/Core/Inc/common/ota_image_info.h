@@ -2,6 +2,7 @@
 #define OTA_IMAGE_INFO_H
 
 #include <stdint.h>
+#include <stddef.h>
 #include "ota_config.h"
 
 typedef struct __attribute__((packed)) {
@@ -12,6 +13,9 @@ typedef struct __attribute__((packed)) {
     uint32_t image_size;
     uint32_t image_crc;
 } ota_image_info_t;
+
+#define OTA_IMAGE_INFO_FIELD_OFFSET_CRC ((uint32_t)offsetof(ota_image_info_t, image_crc))
+#define OTA_IMAGE_INFO_MIN_HEADER_SIZE  ((uint16_t)sizeof(ota_image_info_t))
 
 extern const ota_image_info_t g_ota_image_info;
 

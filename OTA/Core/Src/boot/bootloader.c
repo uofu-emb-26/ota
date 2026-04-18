@@ -1,6 +1,8 @@
 #include "bootloader.h"
 #include "ota_image_info.h"
 #include "ota_config.h"
+#include "ota_metadata.h"
+#include "uart_debug.h"
 #include "stm32f0xx_hal.h"
 #include <string.h>
 
@@ -11,6 +13,50 @@ typedef struct {
     uint8_t bootable;
     ota_image_info_t image_info;
 } boot_slot_info_t;
+
+static void bootloader_log_slot_reason(uint8_t slot_id, const char *reason)
+{
+#if (DEBUG_UART_ENABLE == 1U)
+    if (slot_id == OTA_SLOT_A) {
+        uart_debug_transmit("[BOOT] Slot A: ");
+    } else if (slot_id == OTA_SLOT_B) {
+        uart_debug_transmit("[BOOT] Slot B: ");
+    } else {
+        uart_debug_transmit("[BOOT] Slot ?: ");
+    }
+    uart_debug_transmit(reason);
+    uart_debug_transmit("\r\n");
+#else
+    (void)slot_id;
+    (void)reason;
+#endif
+}
+
+static uint32_t bootloader_crc32_image_ignoring_field(uint32_t slot_base,
+                                                      uint32_t image_size,
+                                                      uint32_t field_abs_addr)
+{
+    const uint8_t *image = (const uint8_t *)slot_base;
+    uint32_t crc = 0xFFFFFFFFU;
+
+    for (uint32_t i = 0U; i < image_size; i++) {
+        uint8_t b = image[i];
+        uint32_t abs = slot_base + i;
+        if (abs >= field_abs_addr && abs < field_abs_addr + 4U) {
+            b = 0U;
+        }
+        crc ^= b;
+        for (uint32_t j = 0U; j < 8U; j++) {
+            if ((crc & 1U) != 0U) {
+                crc = (crc >> 1) ^ 0xEDB88320U;
+            } else {
+                crc >>= 1;
+            }
+        }
+    }
+
+    return crc ^ 0xFFFFFFFFU;
+}
 
 static uint8_t boot_slot_vector_is_valid(uint32_t slot_base)
 {
@@ -42,28 +88,49 @@ static void bootloader_probe_slot(uint8_t slot_id,
     slot->slot_size = slot_size;
 
     if (boot_slot_vector_is_valid(slot_base) == 0U) {
+        bootloader_log_slot_reason(slot_id, "reject vector");
         return;
     }
 
     const ota_image_info_t *manifest = ota_image_info_from_slot(slot_base);
     if (manifest->magic != OTA_IMAGE_INFO_MAGIC) {
+        bootloader_log_slot_reason(slot_id, "reject manifest magic");
         return;
     }
     if (manifest->format_version != OTA_IMAGE_INFO_FORMAT_VER) {
+        bootloader_log_slot_reason(slot_id, "reject manifest format");
         return;
     }
-    if (manifest->header_size < sizeof(ota_image_info_t)) {
+    if (manifest->header_size < OTA_IMAGE_INFO_MIN_HEADER_SIZE) {
+        bootloader_log_slot_reason(slot_id, "reject header size");
         return;
     }
     if (manifest->image_size < (OTA_IMAGE_INFO_OFFSET + manifest->header_size)) {
+        bootloader_log_slot_reason(slot_id, "reject image size low");
         return;
     }
     if (manifest->image_size > slot_size) {
+        bootloader_log_slot_reason(slot_id, "reject image size high");
+        return;
+    }
+
+    if (manifest->image_crc == OTA_IMAGE_INFO_CRC_NONE) {
+        bootloader_log_slot_reason(slot_id, "reject crc missing");
+        return;
+    }
+
+    uint32_t crc_field_abs = slot_base + OTA_IMAGE_INFO_OFFSET + OTA_IMAGE_INFO_FIELD_OFFSET_CRC;
+    uint32_t computed_crc = bootloader_crc32_image_ignoring_field(slot_base,
+                                                                  manifest->image_size,
+                                                                  crc_field_abs);
+    if (computed_crc != manifest->image_crc) {
+        bootloader_log_slot_reason(slot_id, "reject crc mismatch");
         return;
     }
 
     memcpy(&slot->image_info, manifest, sizeof(slot->image_info));
     slot->bootable = 1U;
+    bootloader_log_slot_reason(slot_id, "accept");
 }
 
 static uint8_t bootloader_best_valid_slot(const boot_slot_info_t *slot_a,

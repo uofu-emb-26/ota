@@ -131,33 +131,44 @@ set_target_properties(OTA_bootloader PROPERTIES
 )
 
 # ---------------------------------------------------------------------------
+# CRC stamping helper for OTA app images
+# ---------------------------------------------------------------------------
+set(OTA_IMAGE_INFO_OFFSET 192)
+set(OTA_IMAGE_INFO_MAGIC 0x534A4E41)
+
+# ---------------------------------------------------------------------------
 # Additional build steps to generate .hex and .bin files for the applications
 # ---------------------------------------------------------------------------
-add_custom_command(TARGET OTA_app_a POST_BUILD
-    COMMAND arm-none-eabi-objcopy -O ihex
-    $<TARGET_FILE:OTA_app_a>
-    ${CMAKE_CURRENT_BINARY_DIR}/OTA_app_a.hex
-    COMMENT "Generating OTA_app_a.hex"
-)
-add_custom_command(TARGET OTA_app_b POST_BUILD
-    COMMAND arm-none-eabi-objcopy -O ihex
-    $<TARGET_FILE:OTA_app_b>
-    ${CMAKE_CURRENT_BINARY_DIR}/OTA_app_b.hex
-    COMMENT "Generating OTA_app_b.hex"
-)
-
-
 add_custom_command(TARGET OTA_app_a POST_BUILD
     COMMAND arm-none-eabi-objcopy -O binary
     $<TARGET_FILE:OTA_app_a>
     ${CMAKE_CURRENT_BINARY_DIR}/OTA_app_a.bin
-    COMMENT "Generating OTA_app_a.bin"
+    COMMAND python3 ${CMAKE_SOURCE_DIR}/tools/ota_patch_image_crc.py
+            --elf $<TARGET_FILE:OTA_app_a>
+            --bin ${CMAKE_CURRENT_BINARY_DIR}/OTA_app_a.bin
+            --objcopy arm-none-eabi-objcopy
+            --manifest-offset ${OTA_IMAGE_INFO_OFFSET}
+            --magic ${OTA_IMAGE_INFO_MAGIC}
+    COMMAND arm-none-eabi-objcopy -O ihex
+            $<TARGET_FILE:OTA_app_a>
+            ${CMAKE_CURRENT_BINARY_DIR}/OTA_app_a.hex
+    COMMENT "Generating OTA_app_a.bin/.hex with stamped image CRC"
 )
+
 add_custom_command(TARGET OTA_app_b POST_BUILD
     COMMAND arm-none-eabi-objcopy -O binary
     $<TARGET_FILE:OTA_app_b>
     ${CMAKE_CURRENT_BINARY_DIR}/OTA_app_b.bin
-    COMMENT "Generating OTA_app_b.bin"
+    COMMAND python3 ${CMAKE_SOURCE_DIR}/tools/ota_patch_image_crc.py
+            --elf $<TARGET_FILE:OTA_app_b>
+            --bin ${CMAKE_CURRENT_BINARY_DIR}/OTA_app_b.bin
+            --objcopy arm-none-eabi-objcopy
+            --manifest-offset ${OTA_IMAGE_INFO_OFFSET}
+            --magic ${OTA_IMAGE_INFO_MAGIC}
+    COMMAND arm-none-eabi-objcopy -O ihex
+            $<TARGET_FILE:OTA_app_b>
+            ${CMAKE_CURRENT_BINARY_DIR}/OTA_app_b.hex
+    COMMENT "Generating OTA_app_b.bin/.hex with stamped image CRC"
 )
 
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")

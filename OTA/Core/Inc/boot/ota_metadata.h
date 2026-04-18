@@ -32,6 +32,7 @@ typedef enum {
     OTA_META_ERR_CRC    = -1,   /* CRC mismatch / erased page */
     OTA_META_ERR_FLASH  = -2,   /* Flash erase/write failure  */
     OTA_META_ERR_PARAM  = -3,   /* Invalid API parameter      */
+    OTA_META_ERR_IMAGE  = -4,   /* Slot image failed validation */
 } ota_meta_result_t;
 
 /* ---------------------------------------------------------------------------
