@@ -2,113 +2,45 @@
 
 ## Purpose
 
-This repository is being evolved into a software-managed A/B OTA update system for STM32F072xB.
+This repository implements a software-managed A/B OTA foundation for STM32F072xB.
 
-The target architecture is:
+Current architecture:
 
-- A small custom bootloader at the start of flash.
-- One shared application codebase.
-- The same application codebase built twice:
-  - once for Slot A
-  - once for Slot B
-- The currently running application receives a new image over a transport such as UART and writes it into the inactive slot.
-- The bootloader decides which slot to boot on reset based on metadata.
+- A small custom bootloader at flash start.
+- One shared application codebase, built twice (Slot A and Slot B link addresses).
+- Per-slot application image manifest stored inside each app image.
+- Application is expected to receive future OTA payloads (UART3 path owned by another developer) and write to dormant slot.
 
-This is intended to stay modular so the OTA policy and state machine can later be reused on other MCU families even if the platform-specific flash and boot handoff implementation changes.
+~~The bootloader decides which slot to boot on reset based on metadata.~~
 
-## Platform Facts and Constraints
+Current state:
+
+- Bootloader currently chooses slot from runtime slot probing only (vector table + image manifest checks + firmware version compare).
+- Metadata module still exists and is power-fail-safe, but is currently bypassed by active boot selection logic.
+
+## Platform and Constraints
 
 ### MCU
 
-- Part family in this repo: STM32F072xB
+- Part family: STM32F072xB
 - Flash size: 128 KB
 - RAM size: 16 KB
 - Flash page size: 2 KB (`0x800`)
 
-Confirmed from current HAL headers in this repository.
-
-### Important hardware constraints
+### Hardware constraints
 
 1. Single-bank flash
-- There is no dual-bank hardware A/B swap support.
-- A running image must never erase or reprogram the slot it is currently executing from.
-- The application must always program the inactive slot.
+- No hardware dual-bank swap.
+- Running app must only erase/program dormant slot.
 
 2. Cortex-M0 vector handling
-- STM32F072xB is Cortex-M0.
-- This setup does not use `SCB->VTOR` for vector relocation.
-- Instead, the bootloader copies the selected application's vector table into SRAM and remaps SRAM to address `0x00000000` using SYSCFG.
+- No VTOR usage in this architecture.
+- Bootloader copies selected app vectors to SRAM and remaps SRAM to `0x00000000`.
 
 3. Flash erase granularity
-- Erase is page-based at 2 KB.
-- All partition sizes and metadata locations must be page-aligned.
-
-4. Manufacturer ROM bootloader
-- The factory bootloader in system memory is not the normal OTA mechanism here.
-- It should be treated as a recovery/manufacturing path, not the main OTA flow.
-
-## Design Decisions Made
-
-### 1. Active-slot switching, not physical swap
-
-The design chosen is A/B active-slot switching, not a physical copy-swap algorithm.
-
-Meaning:
-
-- Slot A and Slot B are fixed flash regions.
-- The new image is written into the inactive slot.
-- Metadata tells the bootloader which slot to try next.
-- After reboot, the bootloader either confirms the new slot or rolls back.
-
-Reasoning:
-
-- Physical image swapping is more complex and dangerous on single-bank flash.
-- Fixed slots are simpler, safer, and more portable.
-- This still gives the core A/B behavior expected from OTA systems.
-
-### 2. One application codebase, two slot-linked builds
-
-There are not supposed to be two separate application implementations.
-
-Instead:
-
-- the same application source files are built into Slot A image
-- the same application source files are built into Slot B image
-
-Reasoning:
-
-- This is the standard A/B firmware pattern.
-- The distinction between A and B is a linker/build concern, not a source tree concern.
-
-### 3. Bootloader stays small
-
-The bootloader is intentionally limited to:
-
-- reading metadata
-- selecting the boot slot
-- rollback behavior
-- vector remap and jump
-
-The transport logic such as UART OTA reception belongs in the application, not in the bootloader.
-
-Reasoning:
-
-- Smaller bootloader is easier to validate.
-- The bootloader should change rarely.
-- Update transport can evolve in the app without destabilizing first-stage boot.
-
-### 4. Power-fail-safe metadata writes
-
-Metadata writes use a scratch-page journal approach.
-
-Reasoning:
-
-- If power is lost after erasing metadata but before rewriting it, boot state would be lost.
-- Writing first to scratch allows recovery on the next reset.
+- Page erase only (2 KB).
 
 ## Current Flash Layout
-
-Implemented flash partitioning:
 
 - Bootloader: `0x08000000` to `0x08003FFF` (16 KB)
 - Slot A: `0x08004000` to `0x080117FF` (54 KB)
@@ -116,101 +48,89 @@ Implemented flash partitioning:
 - Scratch: `0x0801F000` to `0x0801F7FF` (2 KB)
 - Metadata: `0x0801F800` to `0x0801FFFF` (2 KB)
 
-RAM usage rule:
+RAM reservation:
 
-- `0x20000000` to `0x200000FF` is reserved for SRAM vector mirror.
-- Bootloader and application linker scripts place `.data/.bss` from `0x20000100` upward.
+- `0x20000000` to `0x200000BF` is currently used for vector mirror (48 entries = 192 bytes).
+- Linker scripts keep application RAM start at `0x20000100`, so mirror headroom remains safe.
 
 ## Current Repository Architecture
 
 ### Bootloader files
 
-- `Core/Inc/bootloader.h`
-- `Core/Src/bootloader.c`
-- `Core/Src/bootloader_main.c`
+- `Core/Inc/boot/bootloader.h`
+- `Core/Src/boot/bootloader.c`
+- `Core/Src/boot/bootloader_main.c`
+- `Core/Src/boot/bootloader_it.c`
 
-Responsibilities:
+Responsibilities today:
 
-- Read metadata
-- Choose A or B
-- Manage rollback policy
-- Copy vector table to SRAM
-- Remap SRAM to `0x00000000`
-- Jump to selected application
+- Probe Slot A and Slot B runtime validity.
+- Select highest valid firmware version from image manifests.
+- Copy vector table to SRAM mirror.
+- Remap SRAM and jump to selected app.
+
+~~Read metadata and run pending/confirmed/trial rollback policy in the boot path.~~
 
 ### Metadata and layout files
 
-- `Core/Inc/ota_config.h`
-- `Core/Inc/ota_metadata.h`
-- `Core/Src/ota_metadata.c`
+- `Core/Inc/boot/ota_config.h`
+- `Core/Inc/boot/ota_metadata.h`
+- `Core/Src/common/ota_metadata.c`
 
 Responsibilities:
 
-- Partition constants
-- Slot and flag definitions
-- Metadata structure and CRC
-- Scratch-page journal behavior
-- Slot confirmation API
+- Partition and slot constants.
+- Metadata structure, CRC, and scratch-page journal write flow.
+- App-callable APIs:
+  - `ota_confirm_current_slot()`
+  - `ota_mark_slot_pending(slot_id)`
 
-### Shared application files
+### Image manifest files
 
-- `Core/Src/main.c`
-- `Core/Src/stm32f0xx_it.c`
-- `Core/Src/stm32f0xx_hal_msp.c`
-- `Core/Src/syscalls.c`
-- `Core/Src/sysmem.c`
-- plus normal application files under `Core/Src`
+- `Core/Inc/common/ota_image_info.h`
+- `Core/Src/common/ota_image_info.c`
+- Linker placement in:
+  - `STM32F072_APP_A.ld`
+  - `STM32F072_APP_B.ld`
 
-Responsibilities:
+Manifest fields currently include:
 
-- Product logic
-- Future OTA transport logic
-- Future inactive-slot programming logic
-- Slot confirmation after successful startup
+- magic
+- format version
+- header size
+- firmware version
+- image size
+- image CRC placeholder (`OTA_IMAGE_INFO_CRC_NONE`)
+
+### Application-side helpers
+
+- `Core/Inc/common/ota_app_helper.h`
+
+Current helper APIs:
+
+- `get_current_slot()`
+- `get_dormant_slot()`
 
 ### Flash helper files
 
-- `Core/Inc/flash_update.h`
-- `Core/Src/flash_update.c`
+- `Core/Inc/common/flash_update.h`
+- `Core/Src/common/flash_update.c`
 
-Responsibilities:
+## Build Targets and Artifacts
 
-- Page erase
-- Half-word programming
-- Buffer programming
-
-### Linker scripts
-
-- `STM32F072_BOOTLOADER.ld`
-- `STM32F072_APP_A.ld`
-- `STM32F072_APP_B.ld`
-- `STM32F072XX_FLASH.ld`
-
-Notes:
-
-- `STM32F072XX_FLASH.ld` is the legacy single-image linker script.
-- The A/B OTA flow should use the slot-specific scripts.
-
-### VS Code debug profiles
-
-Configured in `.vscode/launch.json`:
-
-- `Bootloader`
-- `App A`
-- `App B`
-
-These profiles select the corresponding ELF explicitly.
-
-## Current Build Targets
-
-Relevant build targets:
+Active targets:
 
 - `OTA_bootloader`
 - `OTA_app_a`
 - `OTA_app_b`
-- `OTA` (legacy single-image app target; not part of the A/B OTA flow)
 
-Recommended commands:
+~~`OTA` (legacy single-image app target; not part of the A/B OTA flow)~~
+
+Notes:
+
+- App A and App B now share one firmware version define (`OTA_APP_FIRMWARE_VERSION` in `CMakeLists.txt`).
+
+Recommended build commands:
 
 ```bash
 cmake --preset Debug -B build/Debug
@@ -219,334 +139,145 @@ cmake --build build/Debug --target OTA_app_a
 cmake --build build/Debug --target OTA_app_b
 ```
 
-Generated ELFs:
-
-- `build/Debug/OTA_bootloader.elf`
-- `build/Debug/OTA_app_a.elf`
-- `build/Debug/OTA_app_b.elf`
-
-Verified link addresses:
-
-- `OTA_bootloader.elf` `.isr_vector` at `0x08000000`
-- `OTA_app_a.elf` `.isr_vector` at `0x08004000`
-- `OTA_app_b.elf` `.isr_vector` at `0x08011800`
-
-This verification was done using `arm-none-eabi-readelf -S`.
-
 ## Current Implemented Behavior
 
-### Boot flow
+### Boot flow (as of now)
 
-1. Bootloader starts from flash base.
-2. Bootloader reads metadata.
-3. Bootloader chooses a slot based on:
+1. Bootloader probes both slots.
+2. Slot considered bootable if:
+- vector table sanity passes
+- manifest magic/version/header fields pass
+- manifest image size is in slot bounds
+3. If both slots bootable, higher `firmware_version` wins.
+4. Bootloader remaps vectors and jumps.
+5. If neither slot is bootable, returns `BOOT_ERR_NO_VALID_SLOT`.
+
+~~Boot selection currently uses metadata pending/confirmed/trial state.~~
+
+### Confirmation flow
+
+- App currently calls `ota_confirm_current_slot()` early in startup.
+- This is valid for bring-up but still a placeholder for final project milestone.
+
+## Metadata Role: Current vs Target
+
+### Current state
+
+- Metadata storage is implemented and power-fail-safe.
+- Metadata is **not** used by active boot selection right now.
+
+### Intended steady-state role (agreed)
+
+- Image manifest is source-of-truth for image identity and version.
+- Metadata is source-of-truth for OTA workflow state.
+
+Manifest should own:
+
+- image version
+- image size
+- image integrity fields
+
+Metadata should own:
+
 - active slot
 - pending slot
 - confirmed slot
 - trial boot count
-- valid flags
-4. Bootloader copies the selected application's vector table into SRAM.
-5. Bootloader remaps SRAM to `0x00000000`.
-6. Bootloader loads MSP from the application's vector table and jumps to the application's reset handler.
+- workflow flags
 
-### Confirmation flow
+Read/write ownership guidelines:
 
-Current app code calls `ota_confirm_current_slot()` during startup in `main.c`.
+- Bootloader: read metadata always, write boot-state transitions.
+- Application: write only through narrow APIs (`ota_confirm_current_slot`, `ota_mark_slot_pending`), not raw struct mutations.
 
-This is only a placeholder strategy.
+## What Is Outdated
 
-Production intent:
+~~Bootloader policy is currently metadata-driven with rollback active in boot path.~~
 
-- confirm only after the application has passed meaningful startup/self-test checks
-- not immediately at the top of `main()`
+~~Slot image header format is not yet defined.~~
 
-### Rollback model
+~~Post-build `.hex` generation is missing.~~
 
-- Metadata stores active/pending/confirmed state.
-- If a pending image boots and is never confirmed within the allowed trial count, the bootloader is intended to roll back to the last confirmed slot.
+~~Helpers to determine current and inactive slot are missing.~~
 
-## What Was Fixed During This Work
-
-### Flash driver issues corrected
-
-In `flash_update.c`:
-
-1. Unlock logic bug fixed
-- previous code checked lock state incorrectly against the status register
-- corrected logic uses `FLASH->CR`
-
-2. Page erase address programming bug fixed
-- previous code used OR-assignment on `FLASH->AR`
-- corrected to assignment
-
-3. Error-returning interfaces added
-- erase/program functions now return success/failure status
-
-4. Bulk programming helper added
-- `flash_write_buf()` added to support metadata and future OTA payload writes
-
-## Artifact Format Guidance
-
-### Why `.bin` may appear to start at address 0
-
-A raw `.bin` file usually contains only bytes, not address metadata.
-
-That means:
-
-- the first byte in the file is file offset 0
-- this does not mean the image is linked to flash address 0
-- it only means the file itself is raw binary data
-
-So yes: a `.bin` file often does not preserve the memory address information in the way ELF or Intel HEX does.
-
-### How to verify the image location before flashing
-
-Preferred checks:
-
-1. ELF section addresses
-
-Use:
-
-```bash
-arm-none-eabi-readelf -S build/Debug/OTA_app_a.elf
-arm-none-eabi-readelf -S build/Debug/OTA_app_b.elf
-arm-none-eabi-readelf -S build/Debug/OTA_bootloader.elf
-```
-
-Check `.isr_vector` and `.text` addresses.
-
-2. Map files
-
-Check:
-
-- `build/Debug/OTA_bootloader.map`
-- `build/Debug/OTA_app_a.map`
-- `build/Debug/OTA_app_b.map`
-
-These are authoritative for final placement.
-
-3. Objdump or readelf program headers
-
-These also preserve address information.
-
-### Which file format to flash
-
-Best choices:
-
-1. ELF
-- safest for debug/program flows
-- contains section and symbol address information
-
-2. Intel HEX
-- also safe for programming
-- preserves absolute addresses
-
-Raw BIN is acceptable only if the programmer is explicitly told the correct base address.
-
-Example rule:
-
-- `OTA_app_a.bin` is just bytes for the Slot A-linked image
-- programmer must be told to write them at `0x08004000`
-
-### Practical recommendation
-
-For VS Code debugging/programming:
-
-- use the ELF files
-
-For external programming tools:
-
-- prefer ELF or HEX
-- use BIN only when the write address is explicitly provided
-
-## How The Repository Is Intended To Be Used
-
-### Initial provisioning
-
-Typical first flash:
-
-1. Flash `OTA_bootloader.elf`
-2. Flash `OTA_app_a.elf`
-3. Leave Slot B empty until first update
-
-### Normal OTA runtime model
-
-If currently running Slot A:
-
-1. Receive new image over UART
-2. Erase/program Slot B
-3. Validate the new image
-4. Mark Slot B as pending in metadata
-5. Reboot
-6. Bootloader tries Slot B
-7. Slot B confirms itself after successful startup
-
-If currently running Slot B:
-
-1. Receive new image over UART
-2. Erase/program Slot A
-3. Validate the new image
-4. Mark Slot A as pending in metadata
-5. Reboot
-6. Bootloader tries Slot A
-7. Slot A confirms itself after successful startup
-
-Important rule:
-
-- the active application must always write the inactive slot
-- never erase or program the currently executing slot
-
-### Application development model
-
-You do not write two different applications.
-
-You write one application codebase and build it twice:
-
-- `OTA_app_a`
-- `OTA_app_b`
-
-The linker script determines whether the exact same source tree is placed in Slot A or Slot B.
+~~Metadata API to mark slot pending is missing.~~
 
 ## Current Gaps / Not Yet Implemented
 
-The current repository still does not implement the complete OTA update flow.
+1. UART3 image reception and protocol framing.
+2. Application-side full dormant-slot write state machine.
+3. Final image CRC calculation and verification (manifest currently uses CRC placeholder).
+4. Bootloader recovery behavior UX when no valid slot exists (for example UART diagnostics or recovery mode).
+5. Security features: signatures/authenticity, anti-rollback policy.
+6. Reintroduction of metadata-driven pending/confirmed trial-boot policy in bootloader (using metadata only for workflow state, not image identity).
 
-Missing pieces:
+## Planned Development Path
 
-1. UART image reception
-2. Firmware image transport protocol
-3. Slot image header format
-4. Full slot image validation before setting valid flag
-5. Application-side inactive-slot programming state machine
-6. Metadata state transitions for real update requests
-7. Better confirmation timing policy
-8. Recovery-mode behavior when no valid slot exists
-9. Strong authenticity/security checks such as signatures
-10. Anti-rollback versioning policy
+### Phase 1: Keep current runtime image-based boot valid
 
-## Recommended Next Development Path
+1. Preserve manifest checks in bootloader as mandatory slot gate.
+2. Add explicit UART debug messages in slot probe path for rejection reasons.
 
-### Phase 1: Clean up build and artifact flow
+### Phase 2: Complete manifest integrity
 
-1. Deprecate or remove the legacy `OTA` target from the A/B workflow
-2. Add post-build generation of `.hex` and optional `.bin` files for:
-- bootloader
-- app A
-- app B
-3. Name artifacts clearly for programming and release usage
+1. Populate `image_crc` during build or post-build tooling.
+2. Verify CRC in bootloader probe before marking slot bootable.
+3. Verify CRC in app updater flow before calling `ota_mark_slot_pending`.
 
-### Phase 2: Define image format
+### Phase 3: Re-enable metadata workflow in bootloader
 
-Create a firmware image header that includes at minimum:
+1. Use metadata only for pending/confirmed/trial logic.
+2. Keep slot validity and version discovery strictly manifest-based.
+3. Trial flow target:
+- boot pending if valid
+- app confirms
+- rollback after trial limit when unconfirmed
 
-- magic
-- header version
-- payload size
-- payload CRC
-- firmware version
-- intended slot or generic slot compatibility indicator
+### Phase 4: UART3 updater integration (Jeff)
 
-Reasoning:
+1. Running app identifies dormant slot via helper.
+2. Receive and write dormant-slot image.
+3. Validate written image.
+4. Call `ota_mark_slot_pending(dormant_slot)`.
+5. Reboot.
 
-- Slot validity should not rely only on metadata.
-- Each slot image should be self-describing and verifiable.
+### Phase 5: Confirmation timing hardening
 
-### Phase 3: Implement application-side OTA writer
-
-Add an OTA write pipeline in the app that:
-
-1. identifies the current slot
-2. selects the inactive slot
-3. erases the inactive slot region
-4. receives firmware over UART in chunks
-5. writes chunks to flash
-6. computes CRC while receiving
-7. verifies final image integrity
-8. updates metadata to mark inactive slot as pending
-9. triggers reboot
-
-### Phase 4: Improve bootloader validation
-
-Before jumping to a slot, the bootloader should validate:
-
-1. vector table sanity
-2. image header magic/version
-3. image size bounds
-4. CRC/hash if required at boot time
-
-### Phase 5: Improve confirmation policy
-
-Replace immediate `ota_confirm_current_slot()` call in `main.c` with a real policy.
-
-Example:
-
-- initialize clocks/peripherals
-- run critical checks
-- confirm only after UART stack / product functions are alive
-
-### Phase 6: Add security
-
-Longer-term additions:
-
-1. signed update manifests
-2. version monotonicity checks
-3. anti-rollback counters
-4. optional encryption if needed
+1. Move confirmation call from early startup to health checkpoint.
+2. Confirm only after required peripherals and update-critical services are healthy.
 
 ## Suggested Immediate TODO List
 
-1. Remove ambiguity around legacy target `OTA`
-2. Add post-build `.hex` generation for all deployable images
-3. Add helper functions to determine current slot and inactive slot inside the app
-4. Add metadata API to mark slot pending and valid
-5. Define image header format and place it at the start of each app image
-6. Implement UART receive/write path into inactive slot
-7. Add slot validation before boot and before marking metadata valid
-8. Move confirmation call to a proper healthy-state checkpoint
-9. Add end-to-end tests for:
-- A confirmed to B pending to B confirmed
-- B confirmed to A pending to A confirmed
-- pending image reset without confirm causes rollback
+1. Add bootloader UART diagnostics for slot rejection reasons.
+2. Implement real image CRC generation and probe-time verification.
+3. Implement app-side dormant-slot write pipeline over UART3.
+4. Reintroduce metadata-driven trial/rollback in bootloader with manifest as source of truth for image identity.
+5. Add end-to-end tests:
+- A valid, B valid (version compare)
+- A valid, B empty
+- B valid, A empty
+- pending slot trial then confirm
+- pending slot trial then rollback
 - corrupted metadata recovery via scratch
-- invalid vector table prevents jump
+- corrupted manifest or invalid vector rejection
 
-## Verification Guidance
+## Operational Notes
 
-### Build-time checks
+1. Prefer ELF for debug/programming.
+2. HEX is address-aware and safe for external tools.
+3. BIN requires explicit destination address and also contains explicit Flash address. We need two unique `.bin` files for each slot.
+4. Flash from current build outputs only; stale artifacts can mismatch manifest constants.
 
-Verify after each build:
+## Summary
 
-- linker script used is correct
-- `.isr_vector` address matches expected slot
-- image size fits partition
+Current mental model:
 
-### On-target checks
+- bootloader is small and slot-runtime-aware
+- app images are self-describing via manifest
+- metadata is retained for OTA workflow persistence
+- app transport/updater logic remains outside bootloader
 
-Suggested validation sequence:
+Target mental model:
 
-1. Bootloader + App A initial bring-up
-2. Confirm app starts correctly through bootloader
-3. Inspect metadata page contents
-4. Manually force pending Slot B and test jump
-5. Verify rollback by intentionally skipping confirmation
-6. Corrupt metadata CRC and verify fallback behavior
-
-## Important Operational Notes
-
-1. Debug/program using ELF when possible
-2. Use the VS Code launch profiles `Bootloader`, `App A`, and `App B`
-3. Avoid using the legacy `OTA.elf` for A/B testing
-4. Use `.bin` only when you also control the destination flash address explicitly
-5. Prefer `.hex` or `.elf` for tools that can consume address-aware formats
-
-## Summary of Current Intent
-
-The repository should evolve into:
-
-- a stable, small bootloader
-- a single reusable application codebase
-- slot-specific builds for A and B
-- application-managed update transport and inactive-slot programming
-- bootloader-managed slot selection and rollback
-
-That is the correct mental model for continuing development in future chat sessions.
+- manifest = image truth
+- metadata = workflow truth
