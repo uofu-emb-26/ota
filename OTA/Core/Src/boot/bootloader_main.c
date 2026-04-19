@@ -41,5 +41,8 @@ int main(void)
     /* Only reached if no valid slot found – signal with a busy-loop.
      * Future extension: assert a GPIO error LED or wait for transport. */
     (void)result;
-    while (1) {}
+    while (1) 
+    {
+      led_alternate(150U);
+    }
 }

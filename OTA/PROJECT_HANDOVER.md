@@ -213,18 +213,18 @@ Read/write ownership guidelines:
 
 ## Planned Development Path
 
-### Phase 1: Keep current runtime image-based boot valid
+### Phase 1: Keep current runtime image-based boot valid (done)
 
 1. Preserve manifest checks in bootloader as mandatory slot gate.
 2. Add explicit UART debug messages in slot probe path for rejection reasons.
 
-### Phase 2: Complete manifest integrity
+### Phase 2: Complete manifest integrity (done)
 
 1. Populate `image_crc` during build or post-build tooling.
 2. Verify CRC in bootloader probe before marking slot bootable.
 3. Verify CRC in app updater flow before calling `ota_mark_slot_pending`.
 
-### Phase 3: Re-enable metadata workflow in bootloader
+### Phase 3: Re-enable metadata workflow in bootloader (under construction)
 
 1. Use metadata only for pending/confirmed/trial logic.
 2. Keep slot validity and version discovery strictly manifest-based.
