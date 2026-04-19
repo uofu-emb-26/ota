@@ -18,12 +18,18 @@
 /* USER CODE END Header */
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
+#include "cmsis_gcc.h"
 #include "stm32f072xb.h"
 #include "stm32f0xx_hal.h"
 #include "stm32f0xx_hal_gpio.h"
 #include "flash_update.h"
+#include "ota_image_info.h"
 #include "stm32f0xx_hal_rcc.h"
 #include "ota_metadata.h"
+#include "ota_app_helper.h"
+#include "uart_debug.h"
+#include "led.h"
+
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
@@ -39,6 +45,11 @@
 /* USER CODE BEGIN PD */
 
 /* USER CODE END PD */
+// enable test code using macros
+
+#ifndef FIRMWARE_VERSION
+#define FIRMWARE_VERSION   0U
+#endif
 
 /* Private macro -------------------------------------------------------------*/
 /* USER CODE BEGIN PM */
@@ -54,16 +65,19 @@ SPI_HandleTypeDef hspi2;
 
 TSC_HandleTypeDef htsc;
 
-UART_HandleTypeDef huart4;
-DMA_HandleTypeDef hdma_usart4_rx;
-DMA_HandleTypeDef hdma_usart4_tx;
+#if (DEBUG_UART_ENABLE == 1U)
+  UART_HandleTypeDef huart4;
+  #if 0
+  DMA_HandleTypeDef hdma_usart4_rx;
+  DMA_HandleTypeDef hdma_usart4_tx;
+
+  uint8_t recieved_data[400];
+  static uint16_t uart_size;
+  char application_message[] = "Hello from application 1!";
+  #endif /* 0 */
+#endif /* DEBUG_UART_ENABLE */
 
 PCD_HandleTypeDef hpcd_USB_FS;
-
-uint8_t recieved_data[400];
-static uint16_t uart_size;
-char application_message[] = "Hello from application 1!";
-
 /* USER CODE BEGIN PV */
 
 /* USER CODE END PV */
@@ -77,19 +91,24 @@ static void MX_SPI2_Init(void);
 static void MX_TSC_Init(void);
 static void MX_USB_PCD_Init(void);
 static void MX_CRC_Init(void);
-static void MX_USART4_UART_Init(void);
+#if (DEBUG_UART_ENABLE == 1U)
+//static void MX_USART4_UART_Init(void);
+#endif /* DEBUG_UART_ENABLE */
 /* USER CODE BEGIN PFP */
 
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
+// DMA on UART4 not required currently.
 
-void HAL_UARTEx_RxEventCallback(UART_HandleTypeDef *huart, uint16_t Size)
-{
-  uart_size = Size;
-  HAL_UARTEx_ReceiveToIdle_DMA(&huart4, recieved_data, sizeof(recieved_data));
-}
+// void HAL_UARTEx_RxEventCallback(UART_HandleTypeDef *huart, uint16_t Size)
+// {
+//   uart_size = Size;
+//   HAL_UARTEx_ReceiveToIdle_DMA(&huart4, recieved_data, sizeof(recieved_data));
+// }
+
+
 
 uint8_t boot_verify_crc(uint8_t *data, uint8_t len, uint32_t crc_host)
 {
@@ -116,6 +135,8 @@ uint8_t boot_verify_crc(uint8_t *data, uint8_t len, uint32_t crc_host)
   */
 int main(void)
 {
+  /* Enable all interrupts after jumping to app code */
+  __enable_irq();
 
   /* USER CODE BEGIN 1 */
 
@@ -145,27 +166,22 @@ int main(void)
   MX_TSC_Init();
   MX_USB_PCD_Init();
   MX_CRC_Init();
-  MX_USART4_UART_Init();
-  /* USER CODE BEGIN 2 */
+  #if (DEBUG_UART_ENABLE == 1U)
+  //MX_USART4_UART_Init();
+  uart_debug_init(); //USART4
+#endif /* DEBUG_UART_ENABLE */
+  /* USER CODE BEGIN 2 */  
 
-  __HAL_RCC_GPIOA_CLK_ENABLE();
-  __HAL_RCC_GPIOC_CLK_ENABLE();
+  led_init();
 
-  GPIO_InitTypeDef initStr1 = {GPIO_PIN_6 | GPIO_PIN_7 | GPIO_PIN_8 | GPIO_PIN_9, //LEDS
-                              GPIO_MODE_OUTPUT_PP,
-                              GPIO_NOPULL,
-                              GPIO_SPEED_FREQ_LOW};
-
-                              HAL_GPIO_Init(GPIOC,&initStr1);
-
-  GPIO_InitTypeDef initStr2 = {GPIO_PIN_0, //Pushbutton
+  /*GPIO_InitTypeDef initStr2 = {GPIO_PIN_0, //Pushbutton
                               GPIO_MODE_INPUT,
                               GPIO_PULLDOWN,
                               GPIO_SPEED_FREQ_LOW};
 
                               HAL_GPIO_Init(GPIOA,&initStr2);
-
-  button_interrupt_config();
+*/
+  //button_interrupt_config();
   __NVIC_EnableIRQ(EXTI0_1_IRQn);
   NVIC_SetPriority(EXTI0_1_IRQn,1);
 
@@ -173,32 +189,53 @@ int main(void)
    * Move this call later (after connectivity/sensor checks) for a real app. */
   ota_confirm_current_slot();
 
+  uint8_t current_slot = get_current_slot();
+  uint8_t dormant_slot = get_dormant_slot();
+  const ota_image_info_t *image_info = ota_get_running_image_info();
 
-  HAL_UARTEx_ReceiveToIdle_DMA(&huart4, recieved_data, sizeof(recieved_data));
+  uart_debug_transmit("App running in Slot ");
+  if (current_slot == OTA_SLOT_A) {
+    uart_debug_transmit("A\r\n");
+  } else if (current_slot == OTA_SLOT_B) {
+    uart_debug_transmit("B\r\n");
+  } else {
+    uart_debug_transmit("unknown\r\n");
+  }
+
+  (void)current_slot;
+  (void)dormant_slot;
+  (void)image_info;
+
+#if (DEBUG_UART_ENABLE == 1U)
+  //HAL_UARTEx_ReceiveToIdle_DMA(&huart4, recieved_data, sizeof(recieved_data));
+  #endif /* DEBUG_UART_ENABLE */
 
   /* USER CODE END 2 */
-
+  //HAL_GPIO_WritePin(GPIOC, LED_BLUE_PIN, GPIO_PIN_SET);
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
   while (1)
   {
-    if(uart_size)
-    {
+#if 0
+    if (uart_size) {
       /* returns 1 if the CRC doesn't pass */
-      int crc_flag = boot_verify_crc(recieved_data, uart_size - 4, *((uint32_t *)&recieved_data[uart_size - 4]));
+      int crc_flag =
+          boot_verify_crc(recieved_data, uart_size - 4,
+                          *((uint32_t *)&recieved_data[uart_size - 4]));
 
-      if(crc_flag == 1)
-      {
-        //doesn't match
-        HAL_GPIO_TogglePin(GPIOC, LD3_Pin);
-      }
-      else
-      {
-        //match
-        HAL_GPIO_TogglePin(GPIOC, LD5_Pin);
+      if (crc_flag == 1) {
+        // doesn't match
+        HAL_GPIO_TogglePin(GPIOC, LED_RED_PIN);
+      } else {
+        // match
+        HAL_GPIO_TogglePin(GPIOC, LED_GREEN_PIN);
         // printf("message: % \n", (char*)recieved_data);
       }
     }
+#endif /* 0 */
+
+    led_counterclockwise(150U);
+    //led_clockwise(150U);
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
@@ -424,6 +461,7 @@ static void MX_TSC_Init(void)
 
 }
 
+#if 0
 /**
   * @brief USART4 Initialization Function
   * @param None
@@ -458,6 +496,7 @@ static void MX_USART4_UART_Init(void)
   /* USER CODE END USART4_Init 2 */
 
 }
+#endif /* 0 */
 
 /**
   * @brief USB Initialization Function

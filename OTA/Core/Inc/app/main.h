@@ -95,6 +95,10 @@ void Error_Handler(void);
 #define SWCLK_GPIO_Port GPIOA
 
 /* USER CODE BEGIN Private defines */
+#define LED_RED_PIN     GPIO_PIN_6
+#define LED_BLUE_PIN    GPIO_PIN_7
+#define LED_ORANGE_PIN  GPIO_PIN_8
+#define LED_GREEN_PIN   GPIO_PIN_9
 
 /* USER CODE END Private defines */
 

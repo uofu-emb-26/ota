@@ -1,9 +1,10 @@
 #include "ota_metadata.h"
 #include "flash_update.h"
+#include "ota_image_info.h"
 #include <string.h>
 
 /* Compile-time layout check */
-typedef char _check_metadata_size[(sizeof(ota_metadata_t) == 36U) ? 1 : -1];
+typedef char _check_metadata_size[(sizeof(ota_metadata_t) == 20U) ? 1 : -1];
 
 /* --------------------------------------------------------------------------
  * CRC-32 (IEEE 802.3, reflected polynomial 0xEDB88320)
@@ -50,6 +51,101 @@ static int metadata_is_valid(const ota_metadata_t *meta)
     return 1;
 }
 
+static uint32_t ota_slot_crc32_image_ignoring_field(uint32_t slot_base,
+                                                     uint32_t image_size,
+                                                     uint32_t field_abs_addr)
+{
+    const uint8_t *image = (const uint8_t *)slot_base;
+    uint32_t crc = 0xFFFFFFFFU;
+
+    for (uint32_t i = 0U; i < image_size; i++) {
+        uint8_t b = image[i];
+        uint32_t abs = slot_base + i;
+        if (abs >= field_abs_addr && abs < field_abs_addr + 4U) {
+            b = 0U;
+        }
+        crc ^= b;
+        for (uint32_t j = 0U; j < 8U; j++) {
+            if ((crc & 1U) != 0U) {
+                crc = (crc >> 1) ^ 0xEDB88320U;
+            } else {
+                crc >>= 1;
+            }
+        }
+    }
+
+    return crc ^ 0xFFFFFFFFU;
+}
+
+static uint8_t ota_slot_vector_is_valid(uint32_t slot_base)
+{
+    const uint32_t *app_vectors = (const uint32_t *)slot_base;
+    uint32_t app_sp = app_vectors[0];
+    uint32_t slot_size = (slot_base == OTA_SLOT_A_START) ? OTA_SLOT_A_SIZE
+                                                          : OTA_SLOT_B_SIZE;
+    uint32_t app_reset = app_vectors[1] & ~1U;
+
+    if (app_sp < 0x20000000U || app_sp > OTA_APP_RAM_END) {
+        return 0U;
+    }
+
+    if (app_reset < slot_base || app_reset >= slot_base + slot_size) {
+        return 0U;
+    }
+
+    return 1U;
+}
+
+static ota_meta_result_t ota_slot_image_validate(uint8_t slot_id)
+{
+    uint32_t slot_base;
+    uint32_t slot_size;
+
+    if (slot_id == OTA_SLOT_A) {
+        slot_base = OTA_SLOT_A_START;
+        slot_size = OTA_SLOT_A_SIZE;
+    } else if (slot_id == OTA_SLOT_B) {
+        slot_base = OTA_SLOT_B_START;
+        slot_size = OTA_SLOT_B_SIZE;
+    } else {
+        return OTA_META_ERR_PARAM;
+    }
+
+    if (ota_slot_vector_is_valid(slot_base) == 0U) {
+        return OTA_META_ERR_IMAGE;
+    }
+
+    const ota_image_info_t *manifest = ota_image_info_from_slot(slot_base);
+    if (manifest->magic != OTA_IMAGE_INFO_MAGIC) {
+        return OTA_META_ERR_IMAGE;
+    }
+    if (manifest->format_version != OTA_IMAGE_INFO_FORMAT_VER) {
+        return OTA_META_ERR_IMAGE;
+    }
+    if (manifest->header_size < OTA_IMAGE_INFO_MIN_HEADER_SIZE) {
+        return OTA_META_ERR_IMAGE;
+    }
+    if (manifest->image_size < (OTA_IMAGE_INFO_OFFSET + manifest->header_size)) {
+        return OTA_META_ERR_IMAGE;
+    }
+    if (manifest->image_size > slot_size) {
+        return OTA_META_ERR_IMAGE;
+    }
+    if (manifest->image_crc == OTA_IMAGE_INFO_CRC_NONE) {
+        return OTA_META_ERR_IMAGE;
+    }
+
+    uint32_t crc_field_abs = slot_base + OTA_IMAGE_INFO_OFFSET + OTA_IMAGE_INFO_FIELD_OFFSET_CRC;
+    uint32_t computed_crc = ota_slot_crc32_image_ignoring_field(slot_base,
+                                                                 manifest->image_size,
+                                                                 crc_field_abs);
+    if (computed_crc != manifest->image_crc) {
+        return OTA_META_ERR_IMAGE;
+    }
+
+    return OTA_META_OK;
+}
+
 /* Write a packed ota_metadata_t to the given flash page address.
  * The page must be erased before calling this function. */
 static ota_meta_result_t write_metadata_to_page(uint32_t page_addr,
@@ -71,8 +167,14 @@ void ota_metadata_init_default(ota_metadata_t *meta)
     meta->format_version = OTA_METADATA_FORMAT_VER;
     meta->active_slot    = OTA_SLOT_A;
     meta->pending_slot   = OTA_SLOT_NONE;
-    meta->confirmed_slot = OTA_SLOT_NONE;
+    /* First-boot provisioning assumption:
+     * Bootloader + App A are flashed at manufacturing time.
+     * Mark Slot A as valid/confirmed so blank metadata still boots. */
+    meta->confirmed_slot = OTA_SLOT_A;
+    meta->slot_a_flags   = OTA_FLAG_VALID | OTA_FLAG_CONFIRMED;
+    meta->slot_b_flags   = 0U;
     meta->sequence       = 0U;
+    meta->trial_boot_count = 0U;
     meta->metadata_crc   = ota_metadata_crc(meta);
 }
 
@@ -174,8 +276,9 @@ ota_meta_result_t ota_confirm_current_slot(void)
     ota_metadata_read(&meta);   /* always populates meta with a usable struct */
 
     if (meta.confirmed_slot == running_slot &&
+        meta.pending_slot != running_slot &&
         (meta.trial_boot_count == 0U)) {
-        /* Already confirmed – nothing to write */
+        /* Already confirmed; preserve any staged update for the other slot */
         return OTA_META_OK;
     }
 
@@ -186,7 +289,33 @@ ota_meta_result_t ota_confirm_current_slot(void)
         meta.slot_b_flags |= OTA_FLAG_CONFIRMED;
     }
     meta.confirmed_slot   = running_slot;
+    meta.active_slot      = running_slot;
     meta.pending_slot     = OTA_SLOT_NONE;
+    meta.trial_boot_count = 0U;
+    meta.sequence++;
+
+    return ota_metadata_write(&meta);
+}
+
+ota_meta_result_t ota_mark_slot_pending(uint8_t slot_id)
+{
+    if (slot_id != OTA_SLOT_A && slot_id != OTA_SLOT_B) {
+        return OTA_META_ERR_PARAM;
+    }
+
+    ota_meta_result_t image_ok = ota_slot_image_validate(slot_id);
+    if (image_ok != OTA_META_OK) {
+        return image_ok;
+    }
+
+    ota_metadata_t meta;
+    ota_metadata_read(&meta);
+
+    if (meta.pending_slot == slot_id && meta.trial_boot_count == 0U) {
+        return OTA_META_OK;
+    }
+
+    meta.pending_slot = slot_id;
     meta.trial_boot_count = 0U;
     meta.sequence++;
 

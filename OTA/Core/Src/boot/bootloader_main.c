@@ -1,6 +1,8 @@
 #include "stm32f0xx_hal.h"
 #include "bootloader.h"
 #include "ota_config.h"
+#include "uart_debug.h"
+#include "led.h"
 
 /* Simple RCC init for the bootloader – run at default 8 MHz HSI.
  * No PLL, no peripherals.  HAL_Init sets up SysTick at 1 kHz which
@@ -27,11 +29,20 @@ int main(void)
     HAL_Init();
     bl_clock_init();
 
+    uart_debug_init();
+    uart_debug_transmit("**** RESET, in Bootloader ****\r\n");
+    led_init();
+    led_on();
+    HAL_Delay(150U); //use of blocking delay is acceptable here since the bootloader does not have real-time constraints
+    led_off();
     /* Run boot decision engine.  On success this never returns. */
     boot_result_t result = bootloader_run();
 
     /* Only reached if no valid slot found – signal with a busy-loop.
      * Future extension: assert a GPIO error LED or wait for transport. */
     (void)result;
-    while (1) {}
+    while (1) 
+    {
+      led_alternate(150U);
+    }
 }

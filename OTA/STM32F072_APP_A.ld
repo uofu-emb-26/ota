@@ -11,6 +11,8 @@
 
 ENTRY(Reset_Handler)
 
+__ota_image_start = ORIGIN(FLASH);
+
 MEMORY
 {
   RAM   (xrw) : ORIGIN = 0x20000100, LENGTH = 0x3F00   /* 15872 B */
@@ -28,6 +30,13 @@ SECTIONS
   {
     . = ALIGN(4);
     KEEP(*(.isr_vector))
+    . = ALIGN(4);
+  } >FLASH
+
+  .ota_image_info :
+  {
+    . = ALIGN(4);
+    KEEP(*(.ota_image_info))
     . = ALIGN(4);
   } >FLASH
 
@@ -130,6 +139,8 @@ SECTIONS
   PROVIDE(__data_source       = LOADADDR(.data));
   PROVIDE(__data_source_end   = __tdata_source_end);
   PROVIDE(__data_source_size  = __data_source_end - __data_source);
+  __ota_image_end = __data_source_end;
+  __ota_image_size = __ota_image_end - __ota_image_start;
 
   .tbss (NOLOAD) : ALIGN(4)
   {

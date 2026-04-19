@@ -1,14 +1,74 @@
 # Configure once (or after CMake changes)
 cmake --preset Debug -B build/Debug
 
+# Build all OTA targets (recommended; includes post-build CRC stamping)
+cmake --build build/Debug --target OTA_bootloader OTA_app_a OTA_app_b
+
 # Build bootloader only
 cmake --build build/Debug --target OTA_bootloader
 
 # Build application only
-cmake --build build/Debug --target OTA
+cmake --build build/Debug --target OTA_app_a
+cmake --build build/Debug --target OTA_app_b
+
 
 # Build everything
 cmake --build build/Debug --target all
 
+# Build everything (cube-cmake helper)
+cube-cmake --build /home/sameeran/ota/OTA/build/Debug --
+
 # Clean
 cmake --build build/Debug --target clean
+
+# -------------------------------------------------------------
+# Verify app manifest section (.ota_image_info) after build
+# -------------------------------------------------------------
+# Expected layout (little-endian words):
+#   word0: magic        (0x534A4E41)
+#   word1: fmt+hdrsize  (0x00010014 for fmt=1, size=20)
+#   word2: fw_version
+#   word3: image_size
+#   word4: image_crc    (must be NON-ZERO)
+
+cd build/Debug
+arm-none-eabi-objcopy --dump-section .ota_image_info=ota_a_info.bin OTA_app_a.elf
+arm-none-eabi-objcopy --dump-section .ota_image_info=ota_b_info.bin OTA_app_b.elf
+xxd -g 4 ota_a_info.bin
+xxd -g 4 ota_b_info.bin
+
+# Optional: remove temporary dumped sections
+rm -f ota_a_info.bin ota_b_info.bin
+
+# -------------------------------------------------------------
+# Flash sequence (recommended after architecture changes)
+# -------------------------------------------------------------
+# 1) Mass erase
+cube-cmake --build build/Debug --target erase_flash --
+# or
+cube programmer -c port=SWD -e all
+
+# Flash Bootloader
+openocd -f interface/stlink.cfg -f target/stm32f0x.cfg -c 'program "build/Debug/OTA_bootloader.elf" verify reset exit'
+
+# Flash Application A
+openocd -f interface/stlink.cfg -f target/stm32f0x.cfg -c 'program "build/Debug/OTA_app_a.elf" verify reset exit'
+
+# Flash Application B
+openocd -f interface/stlink.cfg -f target/stm32f0x.cfg -c 'program "build/Debug/OTA_app_b.elf" verify reset exit'
+
+# Optional: verify flash contents by re-running program+verify (no reset at end)
+openocd -f interface/stlink.cfg -f target/stm32f0x.cfg -c 'program "build/Debug/OTA_bootloader.elf" verify exit'
+openocd -f interface/stlink.cfg -f target/stm32f0x.cfg -c 'program "build/Debug/OTA_app_a.elf" verify exit'
+openocd -f interface/stlink.cfg -f target/stm32f0x.cfg -c 'program "build/Debug/OTA_app_b.elf" verify exit'
+
+# kill openocd
+pkill -f openocd
+
+# -------------------------------------------------------------
+# Quick bring-up sanity checks
+# -------------------------------------------------------------
+# 1) Bootloader UART should print reset banner.
+# 2) Bootloader probe logs should show Slot A/B accept/reject reasons.
+# 3) If both slots are valid, slot with higher firmware_version boots.
+

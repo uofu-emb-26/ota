@@ -8,7 +8,7 @@
 /* ---------------------------------------------------------------------------
  * Persistent boot-state record stored in the dedicated metadata flash page.
  *
- * Layout is packed so sizeof(ota_metadata_t) == 36 bytes regardless of
+ * Layout is packed so sizeof(ota_metadata_t) == 20 bytes regardless of
  * compiler padding.  The metadata_crc field covers all preceding bytes:
  *   ota_metadata_crc(meta) == crc32(meta, offsetof(metadata_crc))
  * -------------------------------------------------------------------------*/
@@ -22,19 +22,17 @@ typedef struct __attribute__((packed)) {
     uint8_t  slot_a_flags;      /* OTA_FLAG_VALID | OTA_FLAG_CONFIRMED        */
     uint8_t  slot_b_flags;      /* OTA_FLAG_VALID | OTA_FLAG_CONFIRMED        */
     uint8_t  _reserved;
-    uint32_t slot_a_size;       /* Byte length of the image in Slot A         */
-    uint32_t slot_b_size;       /* Byte length of the image in Slot B         */
-    uint32_t slot_a_crc;        /* CRC32 of the entire Slot A image           */
-    uint32_t slot_b_crc;        /* CRC32 of the entire Slot B image           */
     uint32_t sequence;          /* Monotonic counter – incremented each write */
     uint32_t metadata_crc;      /* CRC32 of all bytes above this field        */
 } ota_metadata_t;
-/* static_assert: sizeof == 36 is checked in ota_metadata.c */
+/* static_assert: sizeof == 20 is checked in ota_metadata.c */
 
 typedef enum {
     OTA_META_OK         = 0,
     OTA_META_ERR_CRC    = -1,   /* CRC mismatch / erased page */
     OTA_META_ERR_FLASH  = -2,   /* Flash erase/write failure  */
+    OTA_META_ERR_PARAM  = -3,   /* Invalid API parameter      */
+    OTA_META_ERR_IMAGE  = -4,   /* Slot image failed validation */
 } ota_meta_result_t;
 
 /* ---------------------------------------------------------------------------
@@ -65,5 +63,8 @@ uint32_t          ota_crc32(const uint8_t *data, uint32_t len);
  * roll back to the previously confirmed slot on the next reset.
  * -------------------------------------------------------------------------*/
 ota_meta_result_t ota_confirm_current_slot(void);
+
+/* Mark a valid slot as the next trial-boot target. */
+ota_meta_result_t ota_mark_slot_pending(uint8_t slot_id);
 
 #endif /* OTA_METADATA_H */
