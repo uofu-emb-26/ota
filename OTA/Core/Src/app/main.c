@@ -27,6 +27,7 @@
 #include "ota_metadata.h"
 #include <stdint.h>
 #include <sys/_intsup.h>
+#include "string.h"
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
@@ -44,6 +45,8 @@
 #define LED_BLUE_PIN    GPIO_PIN_7
 #define LED_ORANGE_PIN  GPIO_PIN_8
 #define LED_GREEN_PIN   GPIO_PIN_9
+
+#define LED_TIMEOUT_MS 200
 
 /* USER CODE END PD */
 // enable test code using macros
@@ -68,7 +71,7 @@ TSC_HandleTypeDef htsc;
 volatile uint8_t cmd_arr[] = {0x11,0x22};
 #endif
 #if (PROGRAM_STORE_UART)
-uint8_t cmd_arr[400];
+uint8_t cmd_arr[4000];
 uint8_t cmd_arr_pointer = 0;
 #endif
 uint8_t rr_val;
@@ -88,6 +91,8 @@ uint8_t invalid_cmd;
   static uint16_t uart_size;
   char application_message[] = "Hello from application 1!";
 #endif /* APP_UART_ENABLE */
+
+
 
 PCD_HandleTypeDef hpcd_USB_FS;
 /* USER CODE BEGIN PV */
@@ -168,8 +173,8 @@ void Set_Baud_Rate()
 
 /* Set the selected pins into alternate function mode and program the correct alternate function
 number into the GPIO AFR registers.
-PC4 - TX
-PC5 - RX
+PC4 - TX - green jumper
+PC5 - RX - red jumper
 */
 void Config_Pins()
 {
@@ -391,7 +396,7 @@ void Check_Data(int num_of_cmds){
 
         #if (PROGRAM_STORE_UART)
         cmd_arr[cmd_arr_pointer] = recieved_data;
-        cmd_arr_pointer++;
+        cmd_arr_pointer += 1;
         flag = 0;
         #endif
       }
@@ -402,7 +407,15 @@ void Check_Data(int num_of_cmds){
 void Parse_Program()
 {
   HAL_GPIO_TogglePin(GPIOC, LED_GREEN_PIN);
+  HAL_GPIO_TogglePin(GPIOC, LED_ORANGE_PIN);
+  HAL_GPIO_TogglePin(GPIOC, LED_RED_PIN);
+  HAL_GPIO_TogglePin(GPIOC, LED_BLUE_PIN);
 
+  HAL_Delay(500);
+
+  HAL_GPIO_TogglePin(GPIOC, LED_RED_PIN);
+  HAL_GPIO_TogglePin(GPIOC, LED_BLUE_PIN);
+  
   // char* cmd_arr_string = "";
   // char * check_string = "hello world";
   // for (int i = 0; i < 11; i++) {
