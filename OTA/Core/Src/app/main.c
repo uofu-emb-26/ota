@@ -411,10 +411,15 @@ void Parse_Program()
   HAL_GPIO_TogglePin(GPIOC, LED_RED_PIN);
   HAL_GPIO_TogglePin(GPIOC, LED_BLUE_PIN);
 
-  HAL_Delay(500);
+  for (int i = 0; i < 20; i++)
+  {
+    HAL_GPIO_TogglePin(GPIOC, LED_RED_PIN);
+    HAL_GPIO_TogglePin(GPIOC, LED_BLUE_PIN);
+    HAL_Delay(500);
+  }
+  
 
-  HAL_GPIO_TogglePin(GPIOC, LED_RED_PIN);
-  HAL_GPIO_TogglePin(GPIOC, LED_BLUE_PIN);
+  
   
   // char* cmd_arr_string = "";
   // char * check_string = "hello world";
@@ -554,9 +559,14 @@ int main(void)
     #endif
     #if (PROGRAM_STORE_UART)
     Check_Data(2);
-    if (cmd_arr_pointer > 11)
+    if (cmd_arr_pointer > 250)
     {
-      Parse_Program();  
+      Parse_Program();
+      // cmd_arr_pointer = 0;
+      // for (int i = 0; i < 3999; i++)
+      // {
+      //   cmd_arr[i] = 0;
+      // }
     }
     #endif
     // --------end of usart3 stuff--------
