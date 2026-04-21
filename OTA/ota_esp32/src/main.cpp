@@ -30,7 +30,7 @@ void setup(){
 
 void loop(){
   // Serial.println("Hello World!");
-  delay(100);
+  delay(10);
   if (Serial.available() > 0) {
     char inputChar = Serial.read();
     Serial.println(inputChar);
