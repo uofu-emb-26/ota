@@ -109,6 +109,13 @@ int flash_write_buf(uint32_t dest_addr, const uint8_t *buf, uint32_t len)
     return 0;
 }
 
+/* ---------------------------------------------------------------------------
+ * flash_clr_upd_region
+ *
+ * Unlocks flash, erases page_total consecutive 2 KB flash pages starting at
+ * start_addr, then locks flash again.
+ * Returns 0 on success, 1 on first page erase failure.
+ * ---------------------------------------------------------------------------*/
 int flash_clr_upd_region(uint32_t start_addr, uint32_t page_total){
     flash_unlock();
     uint32_t current_addr = start_addr;
@@ -124,8 +131,18 @@ int flash_clr_upd_region(uint32_t start_addr, uint32_t page_total){
     return 0;
 }
 
-
-
+/* ---------------------------------------------------------------------------
+ * flash_write_from_uart
+ *
+ * Receives fixed 3-byte records from uart and writes data half-words into the
+ * inactive application slot.
+ * Record format is [type_byte][first_byte][second_byte].
+ * Type 0 ends the transfer.
+ * Type 1 writes first_byte:second_byte as one 16-bit flash half-word.
+ * Type 2 is reserved for future metadata handling.
+ * Erases the selected update region before accepting records.
+ * Returns 0 on successful end record, -1 on slot/protocol/write failure.
+ * ---------------------------------------------------------------------------*/
 int flash_write_from_uart(USART_TypeDef *uart, uint32_t page_total){ //assumes fully initialized uart peripheral
 
     uint8_t current_slot = get_current_slot();
@@ -194,11 +211,23 @@ int flash_write_from_uart(USART_TypeDef *uart, uint32_t page_total){ //assumes f
     return 0;
 }
 
+/* ---------------------------------------------------------------------------
+ * transmit_char
+ *
+ * Blocking transmit of one byte through uart.
+ * Waits until the USART transmit data register is empty, then writes out to TDR.
+ * ---------------------------------------------------------------------------*/
 void transmit_char(uint8_t out, USART_TypeDef *uart){
     while(!(uart->ISR & USART_ISR_TXE)){}
     uart->TDR = out;
 }
 
+/* ---------------------------------------------------------------------------
+ * receive_char
+ *
+ * Blocking receive of one byte through uart.
+ * Waits until the USART receive data register is not empty, then returns RDR.
+ * ---------------------------------------------------------------------------*/
 uint8_t receive_char(USART_TypeDef *uart){
     while(!(uart->ISR & USART_ISR_RXNE)){}
     return (uint8_t)uart->RDR;
