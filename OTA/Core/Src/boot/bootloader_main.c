@@ -30,7 +30,7 @@ int main(void)
     bl_clock_init();
 
     uart_debug_init();
-    uart_debug_transmit("[OTA] Bootloader running\r\n");
+    uart_debug_transmit("**** RESET, in Bootloader ****\r\n");
     led_init();
     led_on();
     HAL_Delay(150U); //use of blocking delay is acceptable here since the bootloader does not have real-time constraints
@@ -41,5 +41,8 @@ int main(void)
     /* Only reached if no valid slot found – signal with a busy-loop.
      * Future extension: assert a GPIO error LED or wait for transport. */
     (void)result;
-    while (1) {}
+    while (1) 
+    {
+      led_alternate(150U);
+    }
 }

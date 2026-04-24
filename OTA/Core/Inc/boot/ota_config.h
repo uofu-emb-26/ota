@@ -42,8 +42,16 @@
  * .data/.bss regions at OTA_APP_RAM_ORIGIN to leave this area untouched.
  * -------------------------------------------------------------------------*/
 #define OTA_VECTOR_MIRROR_SRAM_ADDR 0x20000000U
-#define OTA_VECTOR_TABLE_ENTRIES    64U             /* 16 core + 48 peripheral */
-#define OTA_VECTOR_TABLE_SIZE       (OTA_VECTOR_TABLE_ENTRIES * 4U) /* 256 B */
+#define OTA_VECTOR_TABLE_ENTRIES    48U             /* 16 core + 32 peripheral */
+#define OTA_VECTOR_TABLE_SIZE       (OTA_VECTOR_TABLE_ENTRIES * 4U) /* 192 B */
+
+/* Application image manifest location inside each slot.
+ * The linker places a read-only descriptor immediately after the vector table
+ * so the bootloader can inspect a slot without any metadata help. */
+#define OTA_IMAGE_INFO_OFFSET       OTA_VECTOR_TABLE_SIZE
+#define OTA_IMAGE_INFO_CRC_NONE     0x00000000U
+#define OTA_IMAGE_INFO_MAGIC        0x534A4E41U     /* 'SJNA' - Sameeran, Jeff, Nick, Anthony */
+#define OTA_IMAGE_INFO_FORMAT_VER   0x0001U
 
 #define OTA_APP_RAM_ORIGIN          0x20000100U     /* first usable RAM byte */
 #define OTA_APP_RAM_END             0x20004000U     /* top of SRAM           */
@@ -52,7 +60,7 @@
  * Metadata constants
  * -------------------------------------------------------------------------*/
 #define OTA_METADATA_MAGIC          0xAB5A5AF0U
-#define OTA_METADATA_FORMAT_VER     0x01U
+#define OTA_METADATA_FORMAT_VER     0x02U
 
 /* Slot identifiers */
 #define OTA_SLOT_NONE               0x00U

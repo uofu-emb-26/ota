@@ -1,16 +1,62 @@
 #include "bootloader.h"
-#include "ota_metadata.h"
+#include "ota_image_info.h"
 #include "ota_config.h"
+#include "ota_metadata.h"
+#include "uart_debug.h"
 #include "stm32f0xx_hal.h"
 #include <string.h>
 
-#ifndef OTA_APP_A_VERSION
-#define OTA_APP_A_VERSION 0U
-#endif
+typedef struct {
+    uint8_t slot_id;
+    uint32_t slot_base;
+    uint32_t slot_size;
+    uint8_t bootable;
+    ota_image_info_t image_info;
+} boot_slot_info_t;
 
-#ifndef OTA_APP_B_VERSION
-#define OTA_APP_B_VERSION 0U
+static void bootloader_log_slot_reason(uint8_t slot_id, const char *reason)
+{
+#if (DEBUG_UART_ENABLE == 1U)
+    if (slot_id == OTA_SLOT_A) {
+        uart_debug_transmit("[BOOT] Slot A: ");
+    } else if (slot_id == OTA_SLOT_B) {
+        uart_debug_transmit("[BOOT] Slot B: ");
+    } else {
+        uart_debug_transmit("[BOOT] Slot ?: ");
+    }
+    uart_debug_transmit(reason);
+    uart_debug_transmit("\r\n");
+#else
+    (void)slot_id;
+    (void)reason;
 #endif
+}
+
+static uint32_t bootloader_crc32_image_ignoring_field(uint32_t slot_base,
+                                                      uint32_t image_size,
+                                                      uint32_t field_abs_addr)
+{
+    const uint8_t *image = (const uint8_t *)slot_base;
+    uint32_t crc = 0xFFFFFFFFU;
+
+    for (uint32_t i = 0U; i < image_size; i++) {
+        uint8_t b = image[i];
+        uint32_t abs = slot_base + i;
+        if (abs >= field_abs_addr && abs < field_abs_addr + 4U) {
+            b = 0U;
+        }
+        crc ^= b;
+        for (uint32_t j = 0U; j < 8U; j++) {
+            if ((crc & 1U) != 0U) {
+                crc = (crc >> 1) ^ 0xEDB88320U;
+            } else {
+                crc >>= 1;
+            }
+        }
+    }
+
+    return crc ^ 0xFFFFFFFFU;
+}
 
 static uint8_t boot_slot_vector_is_valid(uint32_t slot_base)
 {
@@ -31,58 +77,77 @@ static uint8_t boot_slot_vector_is_valid(uint32_t slot_base)
     return 1U;
 }
 
-/* --------------------------------------------------------------------------
- * bootloader_select_slot
- *
- * Policy:
- *   1. If a pending slot exists (new OTA image waiting), use it and enter
- *      trial-boot mode.
- *   2. Otherwise use the confirmed (last known-good) slot.
- *   3. If the trial boot count has exceeded OTA_MAX_TRIAL_BOOTS, rollback
- *      to the confirmed slot.
- *   4. If the active slot image is not flagged VALID, try the other slot.
- *   5. If nothing is bootable, return OTA_SLOT_NONE.
- * --------------------------------------------------------------------------*/
-uint8_t bootloader_select_slot(const ota_metadata_t *meta)
+static void bootloader_probe_slot(uint8_t slot_id,
+                                  uint32_t slot_base,
+                                  uint32_t slot_size,
+                                  boot_slot_info_t *slot)
 {
-    uint8_t a_valid = (meta->slot_a_flags & OTA_FLAG_VALID) != 0U;
-    uint8_t b_valid = (meta->slot_b_flags & OTA_FLAG_VALID) != 0U;
+    memset(slot, 0, sizeof(*slot));
+    slot->slot_id = slot_id;
+    slot->slot_base = slot_base;
+    slot->slot_size = slot_size;
 
-    /* Rollback check: too many un-confirmed boots */
-    if ((meta->pending_slot != OTA_SLOT_NONE) &&
-        (meta->trial_boot_count >= OTA_MAX_TRIAL_BOOTS)) {
-        /* Pending slot failed to confirm – fall back to last confirmed */
-        if (meta->confirmed_slot == OTA_SLOT_A && a_valid) {
-            return OTA_SLOT_A;
-        }
-        if (meta->confirmed_slot == OTA_SLOT_B && b_valid) {
-            return OTA_SLOT_B;
-        }
-        /* Confirmed slot is also gone – try anything valid */
-        if (a_valid) { return OTA_SLOT_A; }
-        if (b_valid) { return OTA_SLOT_B; }
-        return OTA_SLOT_NONE;
+    if (boot_slot_vector_is_valid(slot_base) == 0U) {
+        bootloader_log_slot_reason(slot_id, "reject vector");
+        return;
     }
 
-    /* If no pending image is being trial-booted, prefer the newest valid image. */
-    if (meta->pending_slot == OTA_SLOT_NONE && a_valid && b_valid) {
-        if (meta->fw_version_b > meta->fw_version_a) {
+    const ota_image_info_t *manifest = ota_image_info_from_slot(slot_base);
+    if (manifest->magic != OTA_IMAGE_INFO_MAGIC) {
+        bootloader_log_slot_reason(slot_id, "reject manifest magic");
+        return;
+    }
+    if (manifest->format_version != OTA_IMAGE_INFO_FORMAT_VER) {
+        bootloader_log_slot_reason(slot_id, "reject manifest format");
+        return;
+    }
+    if (manifest->header_size < OTA_IMAGE_INFO_MIN_HEADER_SIZE) {
+        bootloader_log_slot_reason(slot_id, "reject header size");
+        return;
+    }
+    if (manifest->image_size < (OTA_IMAGE_INFO_OFFSET + manifest->header_size)) {
+        bootloader_log_slot_reason(slot_id, "reject image size low");
+        return;
+    }
+    if (manifest->image_size > slot_size) {
+        bootloader_log_slot_reason(slot_id, "reject image size high");
+        return;
+    }
+
+    if (manifest->image_crc == OTA_IMAGE_INFO_CRC_NONE) {
+        bootloader_log_slot_reason(slot_id, "reject crc missing");
+        return;
+    }
+
+    uint32_t crc_field_abs = slot_base + OTA_IMAGE_INFO_OFFSET + OTA_IMAGE_INFO_FIELD_OFFSET_CRC;
+    uint32_t computed_crc = bootloader_crc32_image_ignoring_field(slot_base,
+                                                                  manifest->image_size,
+                                                                  crc_field_abs);
+    if (computed_crc != manifest->image_crc) {
+        bootloader_log_slot_reason(slot_id, "reject crc mismatch");
+        return;
+    }
+
+    memcpy(&slot->image_info, manifest, sizeof(slot->image_info));
+    slot->bootable = 1U;
+    bootloader_log_slot_reason(slot_id, "accept");
+}
+
+static uint8_t bootloader_best_valid_slot(const boot_slot_info_t *slot_a,
+                                          const boot_slot_info_t *slot_b)
+{
+    if (slot_a->bootable != 0U && slot_b->bootable != 0U) {
+        if (slot_b->image_info.firmware_version > slot_a->image_info.firmware_version) {
             return OTA_SLOT_B;
         }
         return OTA_SLOT_A;
     }
-
-    /* Normal path: prefer pending, then active */
-    uint8_t candidate = (meta->pending_slot != OTA_SLOT_NONE)
-                        ? meta->pending_slot
-                        : meta->active_slot;
-
-    if (candidate == OTA_SLOT_A && a_valid) { return OTA_SLOT_A; }
-    if (candidate == OTA_SLOT_B && b_valid) { return OTA_SLOT_B; }
-
-    /* Candidate is not valid – try the other slot */
-    if (candidate != OTA_SLOT_A && a_valid) { return OTA_SLOT_A; }
-    if (candidate != OTA_SLOT_B && b_valid) { return OTA_SLOT_B; }
+    if (slot_a->bootable != 0U) {
+        return OTA_SLOT_A;
+    }
+    if (slot_b->bootable != 0U) {
+        return OTA_SLOT_B;
+    }
 
     return OTA_SLOT_NONE;
 }
@@ -90,60 +155,24 @@ uint8_t bootloader_select_slot(const ota_metadata_t *meta)
 /* --------------------------------------------------------------------------
  * bootloader_run
  *
- * Reads metadata, decides boot slot, increments trial counter if in trial
- * mode, then jumps.  Returns only on unrecoverable error.
+ * Minimal runtime selector:
+ *   - Probe both slots directly from flash (vector table + image_info)
+ *   - If both are valid, boot the higher firmware version
+ *   - If one is valid, boot it
+ *   - If none are valid, return BOOT_ERR_NO_VALID_SLOT
+ *
+ * Metadata-based trial/rollback policy is intentionally bypassed for now.
  * --------------------------------------------------------------------------*/
 boot_result_t bootloader_run(void)
 {
-    ota_metadata_t meta;
-    ota_metadata_read(&meta);   /* always returns a usable struct */
+    boot_slot_info_t slot_a;
+    boot_slot_info_t slot_b;
+    bootloader_probe_slot(OTA_SLOT_A, OTA_SLOT_A_START, OTA_SLOT_A_SIZE, &slot_a);
+    bootloader_probe_slot(OTA_SLOT_B, OTA_SLOT_B_START, OTA_SLOT_B_SIZE, &slot_b);
 
-    uint8_t meta_changed = 0U;
-    uint8_t slot_a_present = boot_slot_vector_is_valid(OTA_SLOT_A_START);
-    uint8_t slot_b_present = boot_slot_vector_is_valid(OTA_SLOT_B_START);
-
-    if (slot_a_present) {
-        if ((meta.slot_a_flags & OTA_FLAG_VALID) == 0U) {
-            meta.slot_a_flags |= OTA_FLAG_VALID;
-            meta_changed = 1U;
-        }
-        if (meta.fw_version_a != (uint32_t)OTA_APP_A_VERSION) {
-            meta.fw_version_a = (uint32_t)OTA_APP_A_VERSION;
-            meta_changed = 1U;
-        }
-    }
-
-    if (slot_b_present) {
-        if ((meta.slot_b_flags & OTA_FLAG_VALID) == 0U) {
-            meta.slot_b_flags |= OTA_FLAG_VALID;
-            meta_changed = 1U;
-        }
-        if (meta.fw_version_b != (uint32_t)OTA_APP_B_VERSION) {
-            meta.fw_version_b = (uint32_t)OTA_APP_B_VERSION;
-            meta_changed = 1U;
-        }
-    }
-
-    if (meta_changed != 0U) {
-        meta.sequence++;
-        ota_metadata_write(&meta);
-    }
-
-    uint8_t slot = bootloader_select_slot(&meta);
+    uint8_t slot = bootloader_best_valid_slot(&slot_a, &slot_b);
     if (slot == OTA_SLOT_NONE) {
         return BOOT_ERR_NO_VALID_SLOT;
-    }
-
-    /* If this is a trial boot (pending slot), increment the attempt counter
-     * and persist it so the bootloader knows whether to roll back after a
-     * reset without confirmation. */
-    if (meta.pending_slot != OTA_SLOT_NONE &&
-        slot              == meta.pending_slot) {
-        meta.trial_boot_count++;
-        meta.active_slot  = slot;
-        meta.pending_slot = OTA_SLOT_NONE;  /* consumed */
-        meta.sequence++;
-        ota_metadata_write(&meta);
     }
 
     uint32_t slot_base = (slot == OTA_SLOT_A) ? OTA_SLOT_A_START
