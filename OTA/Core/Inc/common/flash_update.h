@@ -4,6 +4,8 @@
 #include <stdint.h>
 #include <stm32f072xb.h>
 
+#define FLASH_PAGE_SIZE_BYTES 2048U
+
 /* Unlock / lock the flash programming interface */
 void flash_unlock(void);
 void flash_lock(void);

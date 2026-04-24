@@ -117,7 +117,7 @@ int flash_clr_upd_region(uint32_t start_addr, uint32_t page_total){
             flash_lock();
             return 1;
         }
-        current_addr += 2048;
+        current_addr += FLASH_PAGE_SIZE_BYTES;
     }
 
     flash_lock();
@@ -129,7 +129,7 @@ int flash_clr_upd_region(uint32_t start_addr, uint32_t page_total){
 int flash_write_from_uart(USART_TypeDef *uart, uint32_t page_total){ //assumes fully initialized uart peripheral
 
     uint8_t current_slot = get_current_slot();
-    uint32_t start_address;
+    uint32_t write_address;
 
     uint8_t type_byte;
     uint8_t first_byte;
@@ -139,17 +139,17 @@ int flash_write_from_uart(USART_TypeDef *uart, uint32_t page_total){ //assumes f
     uint32_t memory_end;
 
     if(current_slot == 1){
-        start_address = 0x08011800;
+        write_address = 0x08011800;
     } else if(current_slot == 2){
-        start_address = 0x08004000;
+        write_address = 0x08004000;
     } else {
         transmit_char(0xFF, uart);
         return -1;
     }
 
-    memory_end = start_address + ((page_total) * 2048);
+    memory_end = write_address + ((page_total) * FLASH_PAGE_SIZE_BYTES);
 
-    if (flash_clr_upd_region(start_address, page_total) != 0) {
+    if (flash_clr_upd_region(write_address, page_total) != 0) {
       return -1;
     }
     
@@ -168,17 +168,17 @@ int flash_write_from_uart(USART_TypeDef *uart, uint32_t page_total){ //assumes f
         break;
       } else if (type_byte == 1) {
 
-        if ((start_address + 1) >= memory_end) {
+        if ((write_address + 1) >= memory_end) {
           transmit_char(0xFF, uart);
           return -1;
         }
 
-        if (flash_write(start_address, write_data) != 0) {
+        if (flash_write(write_address, write_data) != 0) {
           transmit_char(0xFF, uart);
           return -1;
         }
 
-        start_address += 2;
+        write_address += 2;
         transmit_char(1, uart);
 
       } else if (type_byte == 2) {
