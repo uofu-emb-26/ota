@@ -6,6 +6,7 @@
 #include <WebServer.h>
 #include <HTTPClient.h>
 #include <LittleFS.h>
+#include <stdint.h>
 
 #define LED_DELAY 250U
 #define BINARY_MAX_SIZE 14000 // current size is 12708, could change later
@@ -25,6 +26,12 @@ void readBinaryFromLittleFS(uint8_t* buffer, int* size);
 void handleVerify();
 void handleSendBinary();
 void checkForUpdate();
+void newUpdateAvailable();
+void handleCriticalFailure();
+void enterSendLoop();
+char waitForSTMResponse();
+void handleSuccessfulUpdate();
+void sendPartialBinary();
 
 
 // WARNING: update these credentials before flashing in the define at the top of file
@@ -86,9 +93,66 @@ void loop() {
 
   if (millis() - lastCheck > CHECK_INTERVAL) {
     lastCheck = millis();
-    checkForUpdate();
+    
+    newUpdateAvailable();
   }
 
+}
+
+void handleSuccessfulUpdate()
+{
+  Serial.print("Update sequence complete!");
+  for (int i = 0; i < 5; i++) {
+    handleFlash();
+  }
+}
+
+void newUpdateAvailable()
+{
+  //update the binary with the new version
+  checkForUpdate();
+  //send a 0 to the stm32
+  Serial2.print(0);
+  //wait for response
+  char response = waitForSTMResponse();
+  /* STM32 wants to enter the send, receive, ack loop*/
+  if (response == 0) 
+  {
+    enterSendLoop();
+  }
+      
+      /* STM32 wants a 1-Minute Delay On This Path*/
+  if (response == 1)
+  {
+    //delay for a minute
+    delay(60000); //this is millisecond value
+  }
+      
+  /* STM32 Sends there is a Critical Failure */
+  if (response == 2) 
+  {
+    handleCriticalFailure();
+  }
+    
+}
+
+char waitForSTMResponse()
+{
+  while (!Serial2.available()) {};
+  if (Serial2.available() > 0) {
+      char response = Serial2.read();
+      return response;
+  }
+}
+
+void handleCriticalFailure()
+{
+  return;
+}
+
+void enterSendLoop()
+{
+  sendPartialBinary();
 }
 
 //toggle pin
@@ -218,4 +282,50 @@ void handleSendBinary() {
   Serial2.write(binaryBuffer, size);
   Serial.println("Sent " + String(size) + " bytes over UART");
   server.send(200, "text/plain", "Sent " + String(size) + " bytes over UART");
+}
+
+void sendPartialBinary() {
+  int size = 0;
+  readBinaryFromLittleFS(binaryBuffer, &size);
+  
+  if (size == 0) {
+    server.send(500, "text/plain", "Failed to read binary from LittleFS");
+    return;
+  }
+
+  for (int location = 0; location != size -2; location += 2) 
+  {
+    /* 		[1][x][x] - Half word data transmission */
+    uint8_t data_transmission[] = {0x01, binaryBuffer[location], binaryBuffer[location + 1]}
+
+    //send the data
+    Serial2.write(data_transmission, 3);
+    Serial.println("Sent " + String(3) + " bytes over UART");
+    server.send(200, "text/plain", "Sent " + String(3) + " bytes over UART");  
+
+    //check to make sure the STM is good for more data
+    char response = waitForSTMResponse();
+    if (response != 0xFF) {
+      continue;
+    }
+    handleCriticalFailure();
+  }
+
+  //send CRC value, we finishe transmitting all the data
+  /* 	[2][x][x] - Transmission complete stop byte (must send 3 bytes still) */
+  uint8_t crc_data[] = {0x1,0x2}
+  uint8_t data_transmission[] = {0x02, crc_data[0], crc_data[1]}
+  char response = waitForSTMResponse();
+  if (response != 0xFF ) {
+    
+    //made it to the EOF and send CRC already, the response from the STM32 is good
+    /* 	[0][x][x] - Transmission complete stop byte (must send 3 bytes still) */
+    uint8_t data_transmission[] = {0x00, 0x99, 0x99}
+    char response = waitForSTMResponse();
+    if (response == 0x00 ) {
+      handleSuccessfulUpdate();
+      return;
+    }
+  }
+  handleCriticalFailure();
 }
