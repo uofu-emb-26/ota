@@ -75,7 +75,7 @@ UART_HandleTypeDef huart3;
 // uint8_t cmd_arr_pointer = 0;
 
 #if (DEBUG_UART_ENABLE == 1U)
-  UART_HandleTypeDef huart4;
+  // UART_HandleTypeDef huart4;
   
 #endif /* DEBUG_UART_ENABLE */
 
@@ -318,13 +318,16 @@ int main(void)
     // {
     //   Parse_Program();
     // }
-
+    volatile static int count = 0;
     /* 3. Call uint8_t receive_char(USART_TypeDef uart) in main and check for a 0 */
-    uint8_t val = receive_char(&huart3);
+    if (count == 0) {
+      
+    
+    uint8_t val = receive_char(USART3);
     uint8_t write_result = 99;
     /* 4. if(0) -> call int flash_write_from_uart(USART_TypeDefuart, uint32_t page_total) */
     if (val == 0) {
-      write_result = flash_write_from_uart(&huart3, 27);
+      write_result = flash_write_from_uart(USART3, 27);
     }
     //  5. add an led function after the write based off the return value 
     if (write_result == 0) {
@@ -337,10 +340,14 @@ int main(void)
     //  6. check the memory region
     //  7. reset the device and repeat */
 
+    count += 1;
+
+
+  }
     led_counterclockwise(150U);
     //led_clockwise(150U);
     /* USER CODE END WHILE */
-
+    
     /* USER CODE BEGIN 3 */
   }
   /* USER CODE END 3 */

@@ -10,10 +10,10 @@
 
 #define LED_DELAY 250U
 #define BINARY_MAX_SIZE 14000 // current size is 12708, could change later
-#define SSID "XX"
-#define PASS "XX"
-#define LOCAL_IP "http://X.X.X.X:8080/OTA_app_a.bin"
-#define VERSION_TXT "http://X.X.X.X:8080/version.txt"
+#define SSID "LeChalet2.4Gz"
+#define PASS "1001ABNBEmpire!"
+#define LOCAL_IP "http://10.0.0.88:8080/OTA_app_a.bin"
+#define VERSION_TXT "http://10.0.0.88:8080/version.txt"
 
 // put function declarations here:
 int myFunction(int, int);
@@ -39,7 +39,7 @@ const char* ssid = SSID;
 const char* password = PASS;
 
 unsigned long lastCheck = 0;
-const unsigned long CHECK_INTERVAL = 30000; // check every 30 seconds
+const unsigned long CHECK_INTERVAL = 10000; // check every 30 seconds
 int currentVersion = 1;
 
 // Global buffer for binary data
@@ -90,12 +90,18 @@ void setup() {
 
 void loop() {
   server.handleClient();
-
-  if (millis() - lastCheck > CHECK_INTERVAL) {
-    lastCheck = millis();
-    
-    newUpdateAvailable();
-  }
+  volatile int count = 0;
+  
+  // if (millis() - lastCheck > CHECK_INTERVAL) {
+  //   lastCheck = millis();
+    if (count == 0)
+    {
+      Serial.print("right above new update available");
+      newUpdateAvailable();
+      count += 1;
+    }  
+    // newUpdateAvailable();
+  // }
 
 }
 
@@ -105,16 +111,21 @@ void handleSuccessfulUpdate()
   for (int i = 0; i < 5; i++) {
     handleFlash();
   }
+  delay(60000);
 }
 
 void newUpdateAvailable()
 {
   //update the binary with the new version
+  Serial.print("checking for update");
   checkForUpdate();
   //send a 0 to the stm32
+  Serial.print("telling stm ready for transmit");
   Serial2.print(0);
   //wait for response
   char response = waitForSTMResponse();
+  Serial.print("STMs response: ");
+  Serial.print(response);
   /* STM32 wants to enter the send, receive, ack loop*/
   if (response == 0) 
   {
@@ -138,17 +149,18 @@ void newUpdateAvailable()
 
 char waitForSTMResponse()
 {
-  while (!Serial2.available()) {};
+  while (!Serial2.available()) 
+  { 
+    
+  };
+
   if (Serial2.available() > 0) {
       char response = Serial2.read();
       return response;
   }
 }
 
-void handleCriticalFailure()
-{
-  return;
-}
+void handleCriticalFailure() {}
 
 void enterSendLoop()
 {
@@ -267,6 +279,9 @@ void checkForUpdate() {
       Serial.println("No update available (server: " + String(serverVersion) + ", current: " + String(currentVersion) + ")");
     }
   }
+  else {
+    Serial.print("http.GET failed - not 200 return ");
+  }
   http.end();
 }
 
@@ -280,7 +295,8 @@ void handleSendBinary() {
     return;
   }
   Serial2.write(binaryBuffer, size);
-  Serial.println("Sent " + String(size) + " bytes over UART");
+  Serial.write(binaryBuffer,size);
+  // Serial.println("Sent " + String(size) + " bytes over UART");
   server.send(200, "text/plain", "Sent " + String(size) + " bytes over UART");
 }
 
@@ -293,14 +309,15 @@ void sendPartialBinary() {
     return;
   }
 
-  for (int location = 0; location != size -2; location += 2) 
+  for (int location = 0; location <= size -2; location += 2) 
   {
     /* 		[1][x][x] - Half word data transmission */
-    uint8_t data_transmission[] = {0x01, binaryBuffer[location], binaryBuffer[location + 1]}
+    uint8_t data_transmission[] = {0x01, binaryBuffer[location], binaryBuffer[location + 1]};
 
     //send the data
     Serial2.write(data_transmission, 3);
-    Serial.println("Sent " + String(3) + " bytes over UART");
+    // Serial.println("Sent " + String(3) + " bytes over UART");
+    Serial.write(data_transmission,3);
     server.send(200, "text/plain", "Sent " + String(3) + " bytes over UART");  
 
     //check to make sure the STM is good for more data
@@ -308,7 +325,10 @@ void sendPartialBinary() {
     if (response != 0xFF) {
       continue;
     }
-    handleCriticalFailure();
+    else {
+      handleCriticalFailure();
+      break;
+    }
   }
 
   //send CRC value, we finishe transmitting all the data
