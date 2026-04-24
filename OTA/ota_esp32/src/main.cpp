@@ -9,6 +9,10 @@
 
 #define LED_DELAY 250U
 #define BINARY_MAX_SIZE 14000 // current size is 12708, could change later
+#define SSID "LeChalet2.4Gz"
+#define PASS "1001ABNBEmpire!"
+#define LOCAL_IP "http://10.0.0.88:8080/OTA_app_a.bin"
+#define VERSION_TXT "http://10.0.0.88:8080/version.txt"
 
 // put function declarations here:
 int myFunction(int, int);
@@ -23,9 +27,9 @@ void handleSendBinary();
 void checkForUpdate();
 
 
-// WARNING: update these credentials before flashing
-const char* ssid = "your_network";
-const char* password = "your_password";
+// WARNING: update these credentials before flashing in the define at the top of file
+const char* ssid = SSID;
+const char* password = PASS;
 
 unsigned long lastCheck = 0;
 const unsigned long CHECK_INTERVAL = 30000; // check every 30 seconds
@@ -87,11 +91,6 @@ void loop() {
 
 }
 
-// put function definitions here:
-int myFunction(int x, int y) {
-  return x + y;
-}
-
 //toggle pin
 void togglePin(int pin) {
   digitalWrite(pin, !digitalRead(pin));
@@ -126,7 +125,7 @@ void handleSend() {
 void fetchBinary() {
   HTTPClient http;
   // Update this URL when the host PC IP or filename changes
-  http.begin("http://10.0.0.55:8080/OTA_app_a.bin");
+  http.begin(LOCAL_IP);
   int httpCode = http.GET();
   
   if (httpCode == 200) {
@@ -190,7 +189,7 @@ void handleVerify() {
 // and updates currentVersion to reflect the installed version.
 void checkForUpdate() {
   HTTPClient http;
-  http.begin("http://10.0.0.55:8080/version.txt");
+  http.begin(VERSION_TXT);
   int httpCode = http.GET();
   if (httpCode == 200) {
     String versionStr = http.getString();
