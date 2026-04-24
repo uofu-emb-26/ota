@@ -20,11 +20,16 @@ void storeBinaryToLittleFS(uint8_t* data, int size);
 void readBinaryFromLittleFS(uint8_t* buffer, int* size);
 void handleVerify();
 void handleSendBinary();
+void checkForUpdate();
 
 
 // WARNING: update these credentials before flashing
-const char* ssid = "";
-const char* password = "";
+const char* ssid = "your_network";
+const char* password = "your_password";
+
+unsigned long lastCheck = 0;
+const unsigned long CHECK_INTERVAL = 30000; // check every 30 seconds
+int currentVersion = 1;
 
 // Global buffer for binary data
 uint8_t binaryBuffer[BINARY_MAX_SIZE];
@@ -74,6 +79,12 @@ void setup() {
 
 void loop() {
   server.handleClient();
+
+  if (millis() - lastCheck > CHECK_INTERVAL) {
+    lastCheck = millis();
+    checkForUpdate();
+  }
+
 }
 
 // put function definitions here:
@@ -171,6 +182,29 @@ void handleVerify() {
     response += String(binaryBuffer[i], HEX) + " ";
   }
   server.send(200, "text/plain", response);
+}
+
+// Polls the update server for the latest firmware version number.
+// Fetches version.txt from the server and compares it to the current version.
+// If a newer version is available, triggers fetchBinary() to download the new firmware
+// and updates currentVersion to reflect the installed version.
+void checkForUpdate() {
+  HTTPClient http;
+  http.begin("http://10.0.0.55:8080/version.txt");
+  int httpCode = http.GET();
+  if (httpCode == 200) {
+    String versionStr = http.getString();
+    versionStr.trim();
+    int serverVersion = versionStr.toInt();
+    if (serverVersion > currentVersion) {
+      Serial.println("New version found, fetching...");
+      fetchBinary();
+      currentVersion = serverVersion;
+    } else {
+      Serial.println("No update available (server: " + String(serverVersion) + ", current: " + String(currentVersion) + ")");
+    }
+  }
+  http.end();
 }
 
 // HTTP handler: reads binary from LittleFS and sends it over UART2 to STM32
