@@ -2,6 +2,7 @@
 #define FLASH_UPDATE_H
 
 #include <stdint.h>
+#include <stm32f072xb.h>
 
 /* Unlock / lock the flash programming interface */
 void flash_unlock(void);
@@ -30,6 +31,14 @@ static inline int flash_page_remove(uint32_t addr)
 	flash_lock();
 	return r;
 }
+
+int flash_clr_upd_region(uint32_t start_addr, uint32_t page_total);
+
+int flash_write_from_uart(USART_TypeDef *uart, uint32_t page_total);
+
+void transmit_char(uint8_t out, USART_TypeDef *uart);
+
+uint8_t receive_char(USART_TypeDef *uart);
 
 void button_interrupt_config(void);
 

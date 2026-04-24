@@ -2,6 +2,7 @@
 #include "stm32f072xb.h"
 #include "stm32f0xx_hal.h"
 #include <stdint.h>
+#include <ota_app_helper.h>
 
 /* ---------------------------------------------------------------------------
  * flash_unlock
@@ -110,15 +111,13 @@ int flash_write_buf(uint32_t dest_addr, const uint8_t *buf, uint32_t len)
 
 int flash_clr_upd_region(uint32_t start_addr, uint32_t page_total){
     flash_unlock();
-    uint32_t i=0U;
     uint32_t current_addr = start_addr;
-    while(i < page_total){
-        if(flash_erase_page(start_addr) != 0){
+    for(uint32_t i = 0; i < page_total; i++){
+        if(flash_erase_page(current_addr) != 0){
             flash_lock();
             return 1;
         }
         current_addr += 2048;
-        i++;
     }
 
     flash_lock();
@@ -150,7 +149,7 @@ int flash_write_from_uart(USART_TypeDef *uart, uint32_t page_total){ //assumes f
 
     memory_end = start_address + ((page_total) * 2048);
 
-    if (flash_clr_upd_region(start_address) != 0) {
+    if (flash_clr_upd_region(start_address, page_total) != 0) {
       return -1;
     }
     
@@ -159,9 +158,9 @@ int flash_write_from_uart(USART_TypeDef *uart, uint32_t page_total){ //assumes f
       transmit_char(0, uart); //TODO THIS FUNCTION EXPLICITLY EXCEPTS BEHAVIOR COULD BE ADDED
                               //DICTATING WAIT OR DENY
 
-      type_byte = recieve_char(uart);
-      first_byte = recieve_char(uart);
-      second_byte = recieve_char(uart);
+      type_byte = receive_char(uart);
+      first_byte = receive_char(uart);
+      second_byte = receive_char(uart);
 
       write_data = (((uint16_t)first_byte << 8) | ((uint16_t)second_byte));
 
@@ -200,9 +199,9 @@ void transmit_char(uint8_t out, USART_TypeDef *uart){
     uart->TDR = out;
 }
 
-char receive_char(USART_TypeDef uart){
+uint8_t receive_char(USART_TypeDef *uart){
     while(!(uart->ISR & USART_ISR_RXNE)){}
-    return (char)uart->RDR;
+    return (uint8_t)uart->RDR;
 }
 
 
