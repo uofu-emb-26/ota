@@ -313,14 +313,14 @@ void sendPartialBinary() {
 
   //send CRC value, we finishe transmitting all the data
   /* 	[2][x][x] - Transmission complete stop byte (must send 3 bytes still) */
-  uint8_t crc_data[] = {0x1,0x2}
-  uint8_t data_transmission[] = {0x02, crc_data[0], crc_data[1]}
+  uint8_t crc_data[] = {0x1,0x2};
+  uint8_t data_transmission[] = {0x02, crc_data[0], crc_data[1]};
   char response = waitForSTMResponse();
   if (response != 0xFF ) {
     
     //made it to the EOF and send CRC already, the response from the STM32 is good
     /* 	[0][x][x] - Transmission complete stop byte (must send 3 bytes still) */
-    uint8_t data_transmission[] = {0x00, 0x99, 0x99}
+    uint8_t data_transmission[] = {0x00, 0x99, 0x99};
     char response = waitForSTMResponse();
     if (response == 0x00 ) {
       handleSuccessfulUpdate();
