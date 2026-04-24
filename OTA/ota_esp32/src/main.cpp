@@ -7,13 +7,17 @@
 #include <HTTPClient.h>
 #include <LittleFS.h>
 #include <stdint.h>
+#include <esp_rom_crc.h>
 
+#define INFO_OFFSET   0xC0   // where the two injected lines start
+#define INFO_SIZE     0x14  // 2 lines x 16 bytes = 32 bytes
+#define CRC_OFFSET  0xD0
 #define LED_DELAY 250U
 #define BINARY_MAX_SIZE 14000 // current size is 12708, could change later
-#define SSID "XX"
-#define PASS "XX"
-#define LOCAL_IP "<http://X.X.X.X:8080/OTA_app_a.bin>"
-#define VERSION_TXT "http://X.X.X.X:8080/version.txt"
+#define SSID "gogol2"
+#define PASS "bordello2"
+#define LOCAL_IP "http://10.0.0.55:8080/OTA_app_a.bin"
+#define VERSION_TXT "http://10.0.0.55:8080/version.txt"
 
 // put function declarations here:
 int myFunction(int, int);
@@ -139,10 +143,8 @@ void newUpdateAvailable()
 char waitForSTMResponse()
 {
   while (!Serial2.available()) {};
-  if (Serial2.available() > 0) {
-      char response = Serial2.read();
-      return response;
-  }
+  char response = Serial2.read();
+  return response;
 }
 
 void handleCriticalFailure()
@@ -201,9 +203,29 @@ void fetchBinary() {
 
     Serial.println("Fetched " + String(bytesRead) + " bytes");
     storeBinaryToLittleFS(binaryBuffer, bytesRead);
-  } else {
+
+    // Compute and print CRC32 of the received firmware
+    // Extract stored CRC from offset 0xD0 (second injected line)
+    uint32_t storedCRC;
+    memcpy(&storedCRC, binaryBuffer + CRC_OFFSET, 4);
+    Serial.printf("Stored CRC:   0x%08X\n", storedCRC);
+
+    // Compute CRC over binary with the injected lines excluded:
+    // first chunk: everything before 0xC0
+    // second chunk: everything after 0xC0 + 0x20
+    uint32_t computedCRC = esp_rom_crc32_le(0, binaryBuffer, INFO_OFFSET);
+    computedCRC = esp_rom_crc32_le(computedCRC, binaryBuffer + INFO_OFFSET + INFO_SIZE, bytesRead - INFO_OFFSET - INFO_SIZE);
+
+    Serial.printf("Computed CRC: 0x%08X\n", computedCRC);
+
+    if (computedCRC == storedCRC) {
+      Serial.println("CRC valid!");
+    } else {
+      Serial.println("CRC mismatch — binary may be corrupt");
+    }
+    } else {
     Serial.println("HTTP GET failed: " + String(httpCode));
-  }
+    }
   http.end();
 }
 
@@ -296,10 +318,10 @@ void sendPartialBinary() {
   for (int location = 0; location != size -2; location += 2) 
   {
     /* 		[1][x][x] - Half word data transmission */
-    uint8_t data_transmission[] = {0x01, binaryBuffer[location], binaryBuffer[location + 1]}
+    uint8_t data_transmission[] = {0x01, binaryBuffer[location], binaryBuffer[location + 1]};
 
     //send the data
-    Serial2.write(data_transmission, 3);
+    Serial.write(data_transmission, 3);
     Serial.println("Sent " + String(3) + " bytes over UART");
     server.send(200, "text/plain", "Sent " + String(3) + " bytes over UART");  
 
@@ -313,14 +335,14 @@ void sendPartialBinary() {
 
   //send CRC value, we finishe transmitting all the data
   /* 	[2][x][x] - Transmission complete stop byte (must send 3 bytes still) */
-  uint8_t crc_data[] = {0x1,0x2}
-  uint8_t data_transmission[] = {0x02, crc_data[0], crc_data[1]}
+  uint8_t crc_data[] = {0x1,0x2};
+  uint8_t data_transmission[] = {0x02, crc_data[0], crc_data[1]};
   char response = waitForSTMResponse();
   if (response != 0xFF ) {
     
     //made it to the EOF and send CRC already, the response from the STM32 is good
     /* 	[0][x][x] - Transmission complete stop byte (must send 3 bytes still) */
-    uint8_t data_transmission[] = {0x00, 0x99, 0x99}
+    uint8_t data_transmission[] = {0x00, 0x99, 0x99};
     char response = waitForSTMResponse();
     if (response == 0x00 ) {
       handleSuccessfulUpdate();
