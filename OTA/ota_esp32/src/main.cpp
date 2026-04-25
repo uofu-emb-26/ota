@@ -9,8 +9,6 @@
 #include <stdint.h>
 #include <esp_rom_crc.h>
 
-#define INFO_OFFSET   0xC0   // where the two injected lines start
-#define INFO_SIZE     0x14  // 2 lines x 16 bytes = 32 bytes
 #define CRC_OFFSET  0xD0
 #define LED_DELAY 250U
 #define BINARY_MAX_SIZE 14000 // current size is 12708, could change later
@@ -109,16 +107,20 @@ void handleSuccessfulUpdate()
   for (int i = 0; i < 5; i++) {
     handleFlash();
   }
+  delay(60000);
 }
 
 void newUpdateAvailable()
 {
-  //update the binary with the new version
+  Serial.print("checking for update");
   checkForUpdate();
+  Serial.print("telling stm ready for transmit");
   //send a 0 to the stm32
   Serial2.print(0);
   //wait for response
   char response = waitForSTMResponse();
+  Serial.print("STMs response: ");
+  Serial.print(response);
   /* STM32 wants to enter the send, receive, ack loop*/
   if (response == 0) 
   {
@@ -184,6 +186,26 @@ void handleSend() {
   }
 }
 
+uint32_t crc32(uint8_t* image, uint32_t image_size, uint32_t field_offset) {
+  uint32_t crc = 0xFFFFFFFFU;
+  for (uint32_t i = 0U; i < image_size; i++) {
+    uint8_t b = image[i];
+    if (i >= field_offset && i < field_offset + 4U) {
+      b = 0U;
+    }
+    crc ^= b;
+    for (uint32_t j = 0U; j < 8U; j++) {
+      if ((crc & 1U) != 0U) {
+        crc = (crc >> 1) ^ 0xEDB88320U;
+      } else {
+        crc >>= 1;
+      }
+    }
+  }
+  return crc ^ 0xFFFFFFFFU;
+}
+
+
 // Fetches binary file from HTTP server and stores it in LittleFS
 // LittleFS is a flash based filesystem on the ESP32 that persists across power cycles
 // You can access relevant sections by just using the name of the file, no need to deal with addresses
@@ -204,18 +226,13 @@ void fetchBinary() {
     Serial.println("Fetched " + String(bytesRead) + " bytes");
     storeBinaryToLittleFS(binaryBuffer, bytesRead);
 
-    // Compute and print CRC32 of the received firmware
-    // Extract stored CRC from offset 0xD0 (second injected line)
+    
+    // CRC Checks
     uint32_t storedCRC;
     memcpy(&storedCRC, binaryBuffer + CRC_OFFSET, 4);
     Serial.printf("Stored CRC:   0x%08X\n", storedCRC);
 
-    // Compute CRC over binary with the injected lines excluded:
-    // first chunk: everything before 0xC0
-    // second chunk: everything after 0xC0 + 0x20
-    uint32_t computedCRC = esp_rom_crc32_le(0, binaryBuffer, INFO_OFFSET);
-    computedCRC = esp_rom_crc32_le(computedCRC, binaryBuffer + INFO_OFFSET + INFO_SIZE, bytesRead - INFO_OFFSET - INFO_SIZE);
-
+    uint32_t computedCRC = crc32(binaryBuffer, bytesRead, CRC_OFFSET);
     Serial.printf("Computed CRC: 0x%08X\n", computedCRC);
 
     if (computedCRC == storedCRC) {
@@ -223,9 +240,9 @@ void fetchBinary() {
     } else {
       Serial.println("CRC mismatch — binary may be corrupt");
     }
-    } else {
+  } else {
     Serial.println("HTTP GET failed: " + String(httpCode));
-    }
+  }
   http.end();
 }
 
@@ -288,6 +305,8 @@ void checkForUpdate() {
     } else {
       Serial.println("No update available (server: " + String(serverVersion) + ", current: " + String(currentVersion) + ")");
     }
+  } else {
+    Serial.print("http.GET failed - not 200 return ");
   }
   http.end();
 }
@@ -315,13 +334,13 @@ void sendPartialBinary() {
     return;
   }
 
-  for (int location = 0; location != size -2; location += 2) 
+  for (int location = 0; location <= size -2; location += 2) 
   {
     /* 		[1][x][x] - Half word data transmission */
     uint8_t data_transmission[] = {0x01, binaryBuffer[location], binaryBuffer[location + 1]};
 
     //send the data
-    Serial.write(data_transmission, 3);
+    Serial2.write(data_transmission, 3);
     Serial.println("Sent " + String(3) + " bytes over UART");
     server.send(200, "text/plain", "Sent " + String(3) + " bytes over UART");  
 
