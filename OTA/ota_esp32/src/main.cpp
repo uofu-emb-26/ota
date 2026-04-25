@@ -10,10 +10,10 @@
 
 #define LED_DELAY 250U
 #define BINARY_MAX_SIZE 14000 // current size is 12708, could change later
-#define SSID "LeChalet2.4Gz"
-#define PASS "1001ABNBEmpire!"
-#define LOCAL_IP "http://10.0.0.88:8080/OTA_app_a.bin"
-#define VERSION_TXT "http://10.0.0.88:8080/version.txt"
+#define SSID "xx"
+#define PASS "xx"
+#define LOCAL_IP "http://x.x.x.x:8080/OTA_app_a.bin"
+#define VERSION_TXT "http://x.x.x.x:8080/version.txt"
 
 // put function declarations here:
 int myFunction(int, int);
