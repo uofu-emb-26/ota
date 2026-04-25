@@ -1,6 +1,7 @@
 // ESP32 OTA middleman
 // Receives firmware binary over WiFi from a host PC and forwards it to STM32 over UART2
 // HTTP endpoints: /fetch, /verify, /send_binary, /send, /flash
+
 #include <Arduino.h>
 #include <WiFi.h>
 #include <WebServer.h>
@@ -10,10 +11,10 @@
 
 #define LED_DELAY 250U
 #define BINARY_MAX_SIZE 14000 // current size is 12708, could change later
-#define SSID "xx"
-#define PASS "xx"
-#define LOCAL_IP "http://x.x.x.x:8080/OTA_app_a.bin"
-#define VERSION_TXT "http://x.x.x.x:8080/version.txt"
+#define SSID "x"
+#define PASS "x"
+#define LOCAL_IP "x"
+#define VERSION_TXT "x"
 
 // put function declarations here:
 int myFunction(int, int);
@@ -29,7 +30,7 @@ void checkForUpdate();
 void newUpdateAvailable();
 void handleCriticalFailure();
 void enterSendLoop();
-char waitForSTMResponse();
+uint8_t waitForSTMResponse();
 void handleSuccessfulUpdate();
 void sendPartialBinary();
 
@@ -93,16 +94,20 @@ void setup() {
 
 void loop() {
   server.handleClient();
-  
-  
+  Serial.println("Reset STM now");
+  delay(10000);
+
   // if (millis() - lastCheck > CHECK_INTERVAL) {
   //   lastCheck = millis();
-    if (count == 0)
-    {
-      Serial.print("right above new update available");
-      newUpdateAvailable();
-      count += 1;
-    }  
+    // if (count == 0)
+    // {
+  // Serial.print("right above new update available");
+
+  newUpdateAvailable();
+  
+  delay(6000000);
+      // count += 1;
+    // }  
     // newUpdateAvailable();
   // }
 
@@ -128,8 +133,8 @@ void newUpdateAvailable()
   Serial2.write(0);
 
   //wait for response
-  Serial.print("STMs response: ");
-  char response = waitForSTMResponse();
+  // Serial.print("STMs response: ");
+  uint8_t response = waitForSTMResponse();
   Serial.print(response);
 
   /* STM32 wants to enter the send, receive, ack loop*/
@@ -153,12 +158,12 @@ void newUpdateAvailable()
     
 }
 
-char waitForSTMResponse()
+uint8_t waitForSTMResponse()
 {
   while (!Serial2.available()){};
 
   if (Serial2.available() > 0) {
-      char response = Serial2.read();
+      uint8_t response = Serial2.read();
       return response;
   }
 }
@@ -243,8 +248,8 @@ void readBinaryFromLittleFS(uint8_t* buffer, int* size) {
   }
   *size = file.read(buffer, BINARY_MAX_SIZE);
   file.close();
-  Serial.println("Binary read from LittleFS, read this many bytes: ");
-  Serial.print(*size);
+  Serial.print("Binary read from LittleFS, read this many bytes: ");
+  Serial.println(*size);
 }
 
 // HTTP handler: reads binary from LittleFS and returns size + first 16 byte
@@ -318,8 +323,15 @@ void sendPartialBinary() {
     /* 		[1][x][x] - Half word data transmission */
     uint8_t data_transmission[] = {0x01, binaryBuffer[location], binaryBuffer[location + 1]};
     Serial.println("Looping in sendPartialBinary");
-    Serial.println("Sending 2 bytes from location: ");
-    Serial.print(location);
+    Serial.print("Sending 2 bytes from location: ");
+    Serial.println(location);
+    Serial.println("Sending this data: ");
+    Serial.print("flag byte: ");
+    Serial.println(data_transmission[0]);
+    Serial.print("data bytes: ");
+    Serial.print(data_transmission[1]);
+    Serial.print(",");
+    Serial.println(data_transmission[2]);
     //send the data
     Serial2.write(data_transmission, 3);
     // Serial.println("Sent " + String(3) + " bytes over UART");
@@ -327,7 +339,7 @@ void sendPartialBinary() {
     server.send(200, "text/plain", "Sent " + String(3) + " bytes over UART");  
 
     //check to make sure the STM is good for more data
-    char response = waitForSTMResponse();
+    uint8_t response = waitForSTMResponse();
     Serial.println(response);
     if (response != 0xFF) {
       continue;
@@ -342,13 +354,13 @@ void sendPartialBinary() {
   /* 	[2][x][x] - Transmission complete stop byte (must send 3 bytes still) */
   uint8_t crc_data[] = {0x1,0x2};
   uint8_t data_transmission[] = {0x02, crc_data[0], crc_data[1]};
-  char response = waitForSTMResponse();
+  uint8_t response = waitForSTMResponse();
   if (response != 0xFF ) {
     
     //made it to the EOF and send CRC already, the response from the STM32 is good
     /* 	[0][x][x] - Transmission complete stop byte (must send 3 bytes still) */
     uint8_t data_transmission[] = {0x00, 0x99, 0x99};
-    char response = waitForSTMResponse();
+    uint8_t response = waitForSTMResponse();
     if (response == 0x00 ) {
       handleSuccessfulUpdate();
       return;

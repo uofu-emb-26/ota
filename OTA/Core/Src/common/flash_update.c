@@ -161,6 +161,7 @@ int flash_write_from_uart(USART_TypeDef *uart, uint32_t page_total){ //assumes f
     } else if(current_slot == 2){
         write_address = 0x08004000;
     } else {
+        led_on();
         transmit_char(0xFF, uart);
         return -1;
     }
@@ -171,14 +172,14 @@ int flash_write_from_uart(USART_TypeDef *uart, uint32_t page_total){ //assumes f
       return -1;
     }
     do {
-
+      
       transmit_char(0, uart); //TODO THIS FUNCTION EXPLICITLY EXCEPTS BEHAVIOR COULD BE ADDED
                               //DICTATING WAIT OR DENY
-
+        // led_alternate(100);
       type_byte = receive_char(uart);
       first_byte = receive_char(uart);
       second_byte = receive_char(uart);
-
+        // led_off();
       write_data = (((uint16_t)first_byte << 8) | ((uint16_t)second_byte));
 
       if (type_byte == 0) {
@@ -186,12 +187,14 @@ int flash_write_from_uart(USART_TypeDef *uart, uint32_t page_total){ //assumes f
       } else if (type_byte == 1) {
 
         if ((write_address + 1) >= memory_end) {
+            led_on();
           transmit_char(0xFF, uart);
           return -1;
         }
 
         if (flash_write(write_address, write_data) != 0) {
-          transmit_char(0xFF, uart);
+          led_on();
+            transmit_char(0xFF, uart);
           return -1;
         }
 
@@ -202,6 +205,7 @@ int flash_write_from_uart(USART_TypeDef *uart, uint32_t page_total){ //assumes f
         // placeholder for crc_value handling or other data_type handling
         transmit_char(2, uart);
       } else {
+        led_on();
         transmit_char(0xFF, uart);
         return -1;
       }
@@ -229,7 +233,7 @@ void transmit_char(uint8_t out, USART_TypeDef *uart){
  * Waits until the USART receive data register is not empty, then returns RDR.
  * ---------------------------------------------------------------------------*/
 uint8_t receive_char(USART_TypeDef *uart){
-    led_on();
+    // led_on();
     while(!(uart->ISR & USART_ISR_RXNE)){}
     return (uint8_t)uart->RDR;
     // int flag = 1;

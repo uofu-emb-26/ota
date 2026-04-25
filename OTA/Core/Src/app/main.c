@@ -314,6 +314,7 @@ int main(void)
   /* USER CODE BEGIN WHILE */
   while (1)
   {
+    // HAL_Delay(5000);
     // Check_Data(2);
     // if (cmd_arr_pointer == 2)
     // {
@@ -323,9 +324,9 @@ int main(void)
     /* 3. Call uint8_t receive_char(USART_TypeDef uart) in main and check for a 0 */
     if (count == 0) {
       
-    
+    // led_on();
     val = receive_char(USART3);
-    led_off();
+    // led_off();
     uint8_t write_result = 99;
 
     /* 4. if(0) -> call int flash_write_from_uart(USART_TypeDefuart, uint32_t page_total) */
@@ -334,12 +335,11 @@ int main(void)
     }
     //  5. add an led function after the write based off the return value 
     if (write_result == 0) {
-      uart_debug_transmit("write result was successful - but not verified");
+      // uart_debug_transmit("write result was successful - but not verified");
     }
-
-    // else if (write_result == -1) {
-    //   uart_debug_transmit("write result was unsuccessful");
-    // }
+    else if (write_result == -1) {
+      // uart_debug_transmit("write result was unsuccessful");
+    }
     //  6. check the memory region
     //  7. reset the device and repeat */
 
