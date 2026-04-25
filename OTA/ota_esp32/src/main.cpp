@@ -14,7 +14,8 @@
 #define BINARY_MAX_SIZE 14000 // current size is 12708, could change later
 #define SSID "gogol2"
 #define PASS "bordello2"
-#define LOCAL_IP "http://10.0.0.55:8080/OTA_app_a.bin"
+#define LOCAL_IP_A "http://10.0.0.55:8080/OTA_app_a.bin"
+#define LOCAL_IP_B "http://10.0.0.55:8080/OTA_app_b.bin"
 #define VERSION_TXT "http://10.0.0.55:8080/version.txt"
 
 // put function declarations here:
@@ -22,9 +23,9 @@ int myFunction(int, int);
 void togglePin(int pin);
 void handleFlash();
 void handleSend();
-void fetchBinary();
-void storeBinaryToLittleFS(uint8_t* data, int size);
-void readBinaryFromLittleFS(uint8_t* buffer, int* size);
+void fetchBinary(const char* url, const char* filename);
+void storeBinaryToLittleFS(uint8_t* data, int size, const char* filename);
+void readBinaryFromLittleFS(uint8_t* buffer, int* size, const char* filename);
 void handleVerify();
 void handleSendBinary();
 void checkForUpdate();
@@ -42,7 +43,9 @@ const char* password = PASS;
 
 unsigned long lastCheck = 0;
 const unsigned long CHECK_INTERVAL = 30000; // check every 30 seconds
-int currentVersion = 1;
+
+int currentVersionA = 1;
+int currentVersionB = 1;
 
 // Global buffer for binary data
 uint8_t binaryBuffer[BINARY_MAX_SIZE];
@@ -74,8 +77,9 @@ void setup() {
   }
 
   server.on("/fetch", []() {
-  fetchBinary();
-  server.send(200, "text/plain", "Binary fetched and stored");
+  fetchBinary(LOCAL_IP_A, "/firmware_a.bin");
+  fetchBinary(LOCAL_IP_B, "/firmware_b.bin");
+  server.send(200, "text/plain", "Binaries fetched and stored");
   });
   server.on("/verify", handleVerify);
   server.on("/flash", handleFlash);
@@ -95,8 +99,8 @@ void loop() {
 
   if (millis() - lastCheck > CHECK_INTERVAL) {
     lastCheck = millis();
-    
-    newUpdateAvailable();
+    checkForUpdate();
+    //newUpdateAvailable();
   }
 
 }
@@ -210,10 +214,10 @@ uint32_t crc32(uint8_t* image, uint32_t image_size, uint32_t field_offset) {
 // LittleFS is a flash based filesystem on the ESP32 that persists across power cycles
 // You can access relevant sections by just using the name of the file, no need to deal with addresses
 // currently the file name is firmware.bin, will likely change later...
-void fetchBinary() {
+void fetchBinary(const char* url, const char* filename) {
   HTTPClient http;
   // Update this URL when the host PC IP or filename changes
-  http.begin(LOCAL_IP);
+  http.begin(url);
   int httpCode = http.GET();
   
   if (httpCode == 200) {
@@ -224,7 +228,7 @@ void fetchBinary() {
     int bytesRead = stream->readBytes(binaryBuffer, contentLength);
 
     Serial.println("Fetched " + String(bytesRead) + " bytes");
-    storeBinaryToLittleFS(binaryBuffer, bytesRead);
+    storeBinaryToLittleFS(binaryBuffer, bytesRead, filename);
 
     
     // CRC Checks
@@ -247,8 +251,8 @@ void fetchBinary() {
 }
 
 // Writes binary data to LittleFS as /firmware.bin
-void storeBinaryToLittleFS(uint8_t* data, int size) {
-  File file = LittleFS.open("/firmware.bin", "w");
+void storeBinaryToLittleFS(uint8_t* data, int size, const char* filename) {
+  File file = LittleFS.open(filename, "w");
   if (!file) {
     Serial.println("Failed to open file for writing");
     return;
@@ -259,8 +263,8 @@ void storeBinaryToLittleFS(uint8_t* data, int size) {
 }
 
 // Reads /firmware.bin from LittleFS into a buffer
-void readBinaryFromLittleFS(uint8_t* buffer, int* size) {
-  File file = LittleFS.open("/firmware.bin", "r");
+void readBinaryFromLittleFS(uint8_t* buffer, int* size, const char* filename) {
+  File file = LittleFS.open(filename, "r");
   if (!file) {
     Serial.println("Failed to open file for reading");
     return;
@@ -273,16 +277,34 @@ void readBinaryFromLittleFS(uint8_t* buffer, int* size) {
 // HTTP handler: reads binary from LittleFS and returns size + first 16 byte
 // used to check if write was done properly
 void handleVerify() {
-  int size = 0;
-  readBinaryFromLittleFS(binaryBuffer, &size);
-  if (size == 0) {
-    server.send(500, "text/plain", "Failed to read file");
-    return;
+  String response = "";
+
+  // Verify firmware A
+  int sizeA = 0;
+  readBinaryFromLittleFS(binaryBuffer, &sizeA, "/firmware_a.bin");
+  if (sizeA == 0) {
+    response += "A: Failed to read file\n";
+  } else {
+    response += "A — size: " + String(sizeA) + " bytes, first 16 bytes: ";
+    for (int i = 0; i < 16; i++) {
+      response += String(binaryBuffer[i], HEX) + " ";
+    }
+    response += "\n";
   }
-  String response = "File size: " + String(size) + " bytes\nFirst 16 bytes: ";
-  for (int i = 0; i < 16; i++) {
-    response += String(binaryBuffer[i], HEX) + " ";
+
+  // Verify firmware B
+  int sizeB = 0;
+  readBinaryFromLittleFS(binaryBuffer, &sizeB, "/firmware_b.bin");
+  if (sizeB == 0) {
+    response += "B: Failed to read file\n";
+  } else {
+    response += "B — size: " + String(sizeB) + " bytes, first 16 bytes: ";
+    for (int i = 0; i < 16; i++) {
+      response += String(binaryBuffer[i], HEX) + " ";
+    }
+    response += "\n";
   }
+
   server.send(200, "text/plain", response);
 }
 
@@ -295,15 +317,33 @@ void checkForUpdate() {
   http.begin(VERSION_TXT);
   int httpCode = http.GET();
   if (httpCode == 200) {
-    String versionStr = http.getString();
-    versionStr.trim();
-    int serverVersion = versionStr.toInt();
-    if (serverVersion > currentVersion) {
-      Serial.println("New version found, fetching...");
-      fetchBinary();
-      currentVersion = serverVersion;
+    String body = http.getString();
+    body.trim();
+
+    // Parse A=x
+    int aIndex = body.indexOf("A=");
+    int serverVersionA = (aIndex != -1) ? body.substring(aIndex + 2).toInt() : -1;
+
+    // Parse B=x
+    int bIndex = body.indexOf("B=");
+    int serverVersionB = (bIndex != -1) ? body.substring(bIndex + 2).toInt() : -1;
+
+    Serial.println("Server versions — A: " + String(serverVersionA) + ", B: " + String(serverVersionB));
+
+    if (serverVersionA > currentVersionA) {
+      Serial.println("New version for A found, fetching...");
+      fetchBinary(LOCAL_IP_A, "/firmware_a.bin");
+      currentVersionA = serverVersionA;
     } else {
-      Serial.println("No update available (server: " + String(serverVersion) + ", current: " + String(currentVersion) + ")");
+      Serial.println("No update for A (server: " + String(serverVersionA) + ", current: " + String(currentVersionA) + ")");
+    }
+
+    if (serverVersionB > currentVersionB) {
+      Serial.println("New version for B found, fetching...");
+      fetchBinary(LOCAL_IP_B, "/firmware_b.bin");
+      currentVersionB = serverVersionB;
+    } else {
+      Serial.println("No update for B (server: " + String(serverVersionB) + ", current: " + String(currentVersionB) + ")");
     }
   } else {
     Serial.print("http.GET failed - not 200 return ");
@@ -315,7 +355,8 @@ void checkForUpdate() {
 // SKELETON code to get started below
 void handleSendBinary() {
   int size = 0;
-  readBinaryFromLittleFS(binaryBuffer, &size);
+  // Right now just sends firmwareA, FIX LATER!!
+  readBinaryFromLittleFS(binaryBuffer, &size, "/firmware_a.bin");
   if (size == 0) {
     server.send(500, "text/plain", "Failed to read binary from LittleFS");
     return;
@@ -327,7 +368,7 @@ void handleSendBinary() {
 
 void sendPartialBinary() {
   int size = 0;
-  readBinaryFromLittleFS(binaryBuffer, &size);
+  readBinaryFromLittleFS(binaryBuffer, &size, "/firmware_a.bin");
   
   if (size == 0) {
     server.send(500, "text/plain", "Failed to read binary from LittleFS");
