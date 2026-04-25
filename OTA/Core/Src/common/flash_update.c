@@ -1,4 +1,5 @@
 #include "flash_update.h"
+#include "led.h"
 #include "stm32f072xb.h"
 #include "stm32f0xx_hal.h"
 #include <stdint.h>
@@ -169,7 +170,6 @@ int flash_write_from_uart(USART_TypeDef *uart, uint32_t page_total){ //assumes f
     if (flash_clr_upd_region(write_address, page_total) != 0) {
       return -1;
     }
-    
     do {
 
       transmit_char(0, uart); //TODO THIS FUNCTION EXPLICITLY EXCEPTS BEHAVIOR COULD BE ADDED
@@ -229,9 +229,19 @@ void transmit_char(uint8_t out, USART_TypeDef *uart){
  * Waits until the USART receive data register is not empty, then returns RDR.
  * ---------------------------------------------------------------------------*/
 uint8_t receive_char(USART_TypeDef *uart){
+    led_on();
     while(!(uart->ISR & USART_ISR_RXNE)){}
     return (uint8_t)uart->RDR;
-}
+    // int flag = 1;
+    // uint8_t recieved_data;
+    // while(flag){
+    // if(USART3->ISR & USART_ISR_RXNE_Msk){
+    //     recieved_data = USART3->RDR;
+    //     flag=0;
+    //   }
+    // }
+    // return recieved_data;
+  }
 
 
 /* ---------------------------------------------------------------------------

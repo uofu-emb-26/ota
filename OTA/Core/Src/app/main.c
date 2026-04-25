@@ -93,7 +93,7 @@ static void MX_SPI2_Init(void);
 static void MX_TSC_Init(void);
 static void MX_USB_PCD_Init(void);
 static void MX_CRC_Init(void);
-static void MX_USART3_UART_Init(void);
+// static void MX_USART3_UART_Init(void);
 
 #if (DEBUG_UART_ENABLE == 1U)
 //static void MX_USART4_UART_Init(void);
@@ -123,64 +123,64 @@ static void MX_USART3_UART_Init(void);
 //     GPIOx->ODR ^= GPIO_Pin;
 // }
 
-// /* Enable the system clock to the desired USART in the RCC peripheral. */
-// void Enable_SysClock_USART()
-// {
-//   RCC->APB1ENR |= RCC_APB1ENR_USART3EN;
-// }
+/* Enable the system clock to the desired USART in the RCC peripheral. */
+void Enable_SysClock_USART()
+{
+  RCC->APB1ENR |= RCC_APB1ENR_USART3EN;
+}
 
-// /* Set the Baud rate for communication to be 115200 bits/second. 
-// Using the HAL_RCC_GetHCLKFreq() function to get the system clock frequency.
-// */
-// void Set_Baud_Rate()
-// {
-//   /* Set the Baud Rate to 115200 bits/second 
-//   Baud_Divider = 8000000/115200 = 69.444
-//   USART_BRR = 69*/
-//   uint32_t sys_clock_freq = HAL_RCC_GetHCLKFreq();
-//   uint32_t target_baud = 115200;
-//   USART3->BRR = sys_clock_freq / target_baud;
-// }
+/* Set the Baud rate for communication to be 115200 bits/second. 
+Using the HAL_RCC_GetHCLKFreq() function to get the system clock frequency.
+*/
+void Set_Baud_Rate()
+{
+  /* Set the Baud Rate to 115200 bits/second 
+  Baud_Divider = 8000000/115200 = 69.444
+  USART_BRR = 69*/
+  uint32_t sys_clock_freq = HAL_RCC_GetHCLKFreq();
+  uint32_t target_baud = 115200;
+  USART3->BRR = sys_clock_freq / target_baud;
+}
 
-// /* Set the selected pins into alternate function mode and program the correct alternate function
-// number into the GPIO AFR registers.
-// PC4 - TX - green jumper
-// PC5 - RX - red jumper
-// */
-// void Config_Pins()
-// {
-//   GPIOC->MODER |= GPIO_MODER_MODER4_1;
-//   GPIOC->MODER |= GPIO_MODER_MODER5_1;
-//   GPIOC->MODER &= ~(GPIO_MODER_MODER4_0);
-//   GPIOC->MODER &= ~(GPIO_MODER_MODER5_0);
+/* Set the selected pins into alternate function mode and program the correct alternate function
+number into the GPIO AFR registers.
+PC4 - TX - green jumper
+PC5 - RX - red jumper
+*/
+void Config_Pins()
+{
+  GPIOC->MODER |= GPIO_MODER_MODER4_1;
+  GPIOC->MODER |= GPIO_MODER_MODER5_1;
+  GPIOC->MODER &= ~(GPIO_MODER_MODER4_0);
+  GPIOC->MODER &= ~(GPIO_MODER_MODER5_0);
 
-//   GPIOC->AFR[0] |= 1 << (4*4);
-//   GPIOC->AFR[0] |= 1 << (4*5);
-// }
+  GPIOC->AFR[0] |= 1 << (4*4);
+  GPIOC->AFR[0] |= 1 << (4*5);
+}
 
-// /* Enable the CR1 in USART3*/
-// void Enable_USART_Control()
-// {
-//   USART3->CR1 |= USART_CR1_UE;
-// }
+/* Enable the CR1 in USART3*/
+void Enable_USART_Control()
+{
+  USART3->CR1 |= USART_CR1_UE;
+}
 
-// /* The transmitter can send data words of either 7, 8 or 9 bits depending on the M bits status.
-// The Transmit Enable bit (TE) must be set in order to activate the transmitter function. The
-// data in the transmit shift register is output on the TX pin and the corresponding clock pulses
-// are output on the CK pin. 
+/* The transmitter can send data words of either 7, 8 or 9 bits depending on the M bits status.
+The Transmit Enable bit (TE) must be set in order to activate the transmitter function. The
+data in the transmit shift register is output on the TX pin and the corresponding clock pulses
+are output on the CK pin. 
 
-// See details of the USART RX on DM---936, section 27.5.3
-// */
-// void Enable_TX_RX()
-// {
-//   USART3->CR1 |= USART_CR1_TE;
-//   USART3->CR1 |= USART_CR1_RE;
-// }
+See details of the USART RX on DM---936, section 27.5.3
+*/
+void Enable_TX_RX()
+{
+  USART3->CR1 |= USART_CR1_TE;
+  USART3->CR1 |= USART_CR1_RE;
+}
 
-// void Enable_Receive_Register_NE()
-// {
-//   USART3->CR1 |= USART_CR1_RXNEIE;
-// }
+void Enable_Receive_Register_NE()
+{
+  USART3->CR1 |= USART_CR1_RXNEIE;
+}
 
 // void Check_Data(int num_of_cmds){
 //   /* 1. Check and wait on the USART status flag that indicates 
@@ -211,7 +211,7 @@ static void MX_USART3_UART_Init(void);
 
 // void Parse_Program()
 // {
-//   uart_debug_transmit("got the 3 bytes from esp32 over uart3");
+//   led_off();
   
   
 // }
@@ -248,7 +248,7 @@ int main(void)
   /* USER CODE END SysInit */
 
   /* Initialize all configured peripherals */
-  MX_USART3_UART_Init();
+  // MX_USART3_UART_Init();
   MX_GPIO_Init();
   MX_DMA_Init();
   MX_I2C2_Init();
@@ -264,11 +264,11 @@ int main(void)
   led_init();
 
   /* UART 3 stuff */
-  // Enable_SysClock_USART();
-  // Set_Baud_Rate();
-  // Config_Pins();
-  // Enable_TX_RX();
-  // Enable_USART_Control();
+  Enable_SysClock_USART();
+  Set_Baud_Rate();
+  Config_Pins();
+  Enable_TX_RX();
+  Enable_USART_Control();
 
   /*GPIO_InitTypeDef initStr2 = {GPIO_PIN_0, //Pushbutton
                               GPIO_MODE_INPUT,
@@ -287,6 +287,7 @@ int main(void)
 
   uint8_t current_slot = get_current_slot();
   uint8_t dormant_slot = get_dormant_slot();
+  uint8_t val = 0;
   const ota_image_info_t *image_info = ota_get_running_image_info();
 
   uart_debug_transmit("App running in Slot ");
@@ -306,7 +307,7 @@ int main(void)
   #if (DEBUG_UART_ENABLE == 1U)
   //HAL_UARTEx_ReceiveToIdle_DMA(&huart4, recieved_data, sizeof(recieved_data));
   #endif /* DEBUG_UART_ENABLE */
-
+  
   /* USER CODE END 2 */
   //HAL_GPIO_WritePin(GPIOC, LED_BLUE_PIN, GPIO_PIN_SET);
   /* Infinite loop */
@@ -323,10 +324,12 @@ int main(void)
     if (count == 0) {
       
     
-    uint8_t val = receive_char(USART3);
+    val = receive_char(USART3);
+    led_off();
     uint8_t write_result = 99;
+
     /* 4. if(0) -> call int flash_write_from_uart(USART_TypeDefuart, uint32_t page_total) */
-    if (val == 0) {
+    if (val == 0x0) {
       write_result = flash_write_from_uart(USART3, 27);
     }
     //  5. add an led function after the write based off the return value 
@@ -334,9 +337,9 @@ int main(void)
       uart_debug_transmit("write result was successful - but not verified");
     }
 
-    else if (write_result == -1) {
-      uart_debug_transmit("write result was unsuccessful");
-    }
+    // else if (write_result == -1) {
+    //   uart_debug_transmit("write result was unsuccessful");
+    // }
     //  6. check the memory region
     //  7. reset the device and repeat */
 
@@ -409,40 +412,40 @@ void EXTI0_1_IRQHandler(void){
 
 }
 
-/**
-  * @brief USART3 Initialization Function
-  * @param None
-  * @retval None
-  */
-static void MX_USART3_UART_Init(void)
-{
+// /**
+//   * @brief USART3 Initialization Function
+//   * @param None
+//   * @retval None
+//   */
+// static void MX_USART3_UART_Init(void)
+// {
 
-  /* USER CODE BEGIN USART3_Init 0 */
+//   /* USER CODE BEGIN USART3_Init 0 */
 
-  /* USER CODE END USART3_Init 0 */
+//   /* USER CODE END USART3_Init 0 */
 
-  /* USER CODE BEGIN USART3_Init 1 */
+//   /* USER CODE BEGIN USART3_Init 1 */
 
-  /* USER CODE END USART3_Init 1 */
-  huart3.Instance = USART3;
-  huart3.Init.BaudRate = 115200;
-  huart3.Init.WordLength = UART_WORDLENGTH_8B;
-  huart3.Init.StopBits = UART_STOPBITS_1;
-  huart3.Init.Parity = UART_PARITY_NONE;
-  huart3.Init.Mode = UART_MODE_TX_RX;
-  huart3.Init.HwFlowCtl = UART_HWCONTROL_NONE;
-  huart3.Init.OverSampling = UART_OVERSAMPLING_16;
-  huart3.Init.OneBitSampling = UART_ONE_BIT_SAMPLE_DISABLE;
-  huart3.AdvancedInit.AdvFeatureInit = UART_ADVFEATURE_NO_INIT;
-  if (HAL_UART_Init(&huart3) != HAL_OK)
-  {
-    Error_Handler();
-  }
-  /* USER CODE BEGIN USART3_Init 2 */
+//   /* USER CODE END USART3_Init 1 */
+//   huart3.Instance = USART3;
+//   huart3.Init.BaudRate = 115200;
+//   huart3.Init.WordLength = UART_WORDLENGTH_8B;
+//   huart3.Init.StopBits = UART_STOPBITS_1;
+//   huart3.Init.Parity = UART_PARITY_NONE;
+//   huart3.Init.Mode = UART_MODE_TX_RX;
+//   huart3.Init.HwFlowCtl = UART_HWCONTROL_NONE;
+//   huart3.Init.OverSampling = UART_OVERSAMPLING_16;
+//   huart3.Init.OneBitSampling = UART_ONE_BIT_SAMPLE_DISABLE;
+//   huart3.AdvancedInit.AdvFeatureInit = UART_ADVFEATURE_NO_INIT;
+//   if (HAL_UART_Init(&huart3) != HAL_OK)
+//   {
+//     Error_Handler();
+//   }
+//   /* USER CODE BEGIN USART3_Init 2 */
 
-  /* USER CODE END USART3_Init 2 */
+//   /* USER CODE END USART3_Init 2 */
 
-}
+// }
 
 /**
   * @brief CRC Initialization Function

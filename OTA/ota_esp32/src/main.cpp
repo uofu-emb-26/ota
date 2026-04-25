@@ -10,10 +10,10 @@
 
 #define LED_DELAY 250U
 #define BINARY_MAX_SIZE 14000 // current size is 12708, could change later
-#define SSID "xx"
-#define PASS "xx"
-#define LOCAL_IP "http://x.x.x.x:8080/OTA_app_a.bin"
-#define VERSION_TXT "http://x.x.x.x:8080/version.txt"
+#define SSID "LeChalet2.4Gz"
+#define PASS "1001ABNBEmpire!"
+#define LOCAL_IP "http://10.0.0.88:8080/OTA_app_a.bin"
+#define VERSION_TXT "http://10.0.0.88:8080/version.txt"
 
 // put function declarations here:
 int myFunction(int, int);
@@ -41,7 +41,9 @@ const char* password = PASS;
 unsigned long lastCheck = 0;
 const unsigned long CHECK_INTERVAL = 10000; // check every 30 seconds
 int currentVersion = 1;
+volatile int count = 0;
 
+const byte interruptPin = 2;
 // Global buffer for binary data
 uint8_t binaryBuffer[BINARY_MAX_SIZE];
 
@@ -49,7 +51,7 @@ WebServer server(8080);
 
 void setup() {
   Serial.begin(115200);
-  Serial2.begin(115200);
+  Serial2.begin(115200, SERIAL_8N1, 16, 17);
   delay(500);
   Serial.println("Hello, World!");
   pinMode(LED_BUILTIN, OUTPUT);
@@ -81,6 +83,7 @@ void setup() {
   server.on("/send_binary", handleSendBinary);
   server.begin();
 
+  
   //void loop is called here so it's acutally doing:
   /* 
   void loop() {
@@ -90,7 +93,7 @@ void setup() {
 
 void loop() {
   server.handleClient();
-  volatile int count = 0;
+  
   
   // if (millis() - lastCheck > CHECK_INTERVAL) {
   //   lastCheck = millis();
@@ -119,13 +122,16 @@ void newUpdateAvailable()
   //update the binary with the new version
   Serial.print("checking for update");
   checkForUpdate();
+
   //send a 0 to the stm32
-  Serial.print("telling stm ready for transmit");
-  Serial2.print(0);
+  Serial.println("telling stm ready for transmit");
+  Serial2.write(0);
+
   //wait for response
-  char response = waitForSTMResponse();
   Serial.print("STMs response: ");
+  char response = waitForSTMResponse();
   Serial.print(response);
+
   /* STM32 wants to enter the send, receive, ack loop*/
   if (response == 0) 
   {
@@ -149,10 +155,7 @@ void newUpdateAvailable()
 
 char waitForSTMResponse()
 {
-  while (!Serial2.available()) 
-  { 
-    
-  };
+  while (!Serial2.available()){};
 
   if (Serial2.available() > 0) {
       char response = Serial2.read();
@@ -295,7 +298,7 @@ void handleSendBinary() {
     return;
   }
   Serial2.write(binaryBuffer, size);
-  Serial.write(binaryBuffer,size);
+  // Serial.write(binaryBuffer,size);
   // Serial.println("Sent " + String(size) + " bytes over UART");
   server.send(200, "text/plain", "Sent " + String(size) + " bytes over UART");
 }
@@ -313,7 +316,9 @@ void sendPartialBinary() {
   {
     /* 		[1][x][x] - Half word data transmission */
     uint8_t data_transmission[] = {0x01, binaryBuffer[location], binaryBuffer[location + 1]};
-
+    Serial.println("Looping in sendPartialBinary");
+    Serial.println("Sending 2 bytes from location: ");
+    Serial.print(location);
     //send the data
     Serial2.write(data_transmission, 3);
     // Serial.println("Sent " + String(3) + " bytes over UART");
@@ -322,6 +327,7 @@ void sendPartialBinary() {
 
     //check to make sure the STM is good for more data
     char response = waitForSTMResponse();
+    Serial.println(response);
     if (response != 0xFF) {
       continue;
     }
