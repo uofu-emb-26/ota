@@ -8,18 +8,29 @@
 #include <LittleFS.h>
 #include <stdint.h>
 #include <esp_rom_crc.h>
+#include <WiFiClientSecure.h>
+#include <PubSubClient.h>
 
 #define CRC_OFFSET  0xD0
 #define LED_DELAY 250U
 #define BINARY_MAX_SIZE 14000 // current size is 12708, could change later
-#define SSID "gogol2"
-#define PASS "bordello2"
-#define LOCAL_IP_A "http://10.0.0.55:8080/OTA_app_a.bin"
-#define LOCAL_IP_B "http://10.0.0.55:8080/OTA_app_b.bin"
-#define VERSION_TXT "http://10.0.0.55:8080/version.txt"
+#define SSID "x"
+#define PASS "x"
+
+#define LOCAL_IP_A  "https://raw.githubusercontent.com/anton2uha/OTAfiles/main/OTA_app_a.bin"
+#define LOCAL_IP_B  "https://raw.githubusercontent.com/anton2uha/OTAfiles/main/OTA_app_b.bin"
+#define VERSION_TXT "https://raw.githubusercontent.com/anton2uha/OTAfiles/main/version.txt"
+
+#define MQTT_BROKER "d8572968555946a9b813068561cedb0f.s1.eu.hivemq.cloud"
+#define MQTT_PORT   8883  // TLS port
+#define MQTT_USER   "OTAupdate"
+#define MQTT_PASS   "Update123"
+#define MQTT_TOPIC  "ota/update"
+
+WiFiClientSecure tlsClient;
+PubSubClient mqtt(tlsClient);
 
 // put function declarations here:
-int myFunction(int, int);
 void togglePin(int pin);
 void handleFlash();
 void handleSend();
@@ -52,6 +63,51 @@ uint8_t binaryBuffer[BINARY_MAX_SIZE];
 
 WebServer server(8080);
 
+void mqttCallback(char* topic, byte* payload, unsigned int length) {
+  String message;
+  for (int i = 0; i < length; i++) {
+    message += (char)payload[i];
+  }
+
+  if (message == "flash") {
+    Serial.println("MQTT: flash command received");
+    handleFlash();
+  } else if (message == "fetch") {
+    Serial.println("MQTT: force fetch command received");
+    fetchBinary(LOCAL_IP_A, "/firmware_a.bin");
+    fetchBinary(LOCAL_IP_B, "/firmware_b.bin");
+  } else if (message == "verify") {
+    Serial.println("MQTT: verify command received");
+    handleVerify();
+  } else if (message == "send") {
+    Serial.println("MQTT: send command received");
+    handleSend();
+  } else if (message == "send_binary") {
+    Serial.println("MQTT: send_binary command received");
+    handleSendBinary();
+  } else if (message == "check_update") {
+    Serial.println("MQTT: check_update command received");
+    checkForUpdate();
+  } else {
+    Serial.println("MQTT: unknown command: " + message);
+  }
+}
+
+
+void mqttReconnect() {
+  while (!mqtt.connected()) {
+    Serial.print("Connecting to MQTT...");
+    if (mqtt.connect("ESP32Client", MQTT_USER, MQTT_PASS)) {
+      Serial.println("connected");
+      mqtt.subscribe(MQTT_TOPIC);
+    } else {
+      Serial.println("failed, retrying in 5s");
+      delay(5000);
+    }
+  }
+}
+
+
 void setup() {
   Serial.begin(115200);
   Serial2.begin(115200);
@@ -76,6 +132,11 @@ void setup() {
     Serial.println("\nConnected! IP: " + WiFi.localIP().toString());
   }
 
+  tlsClient.setInsecure();
+  mqtt.setServer(MQTT_BROKER, MQTT_PORT);
+  mqtt.setCallback(mqttCallback);
+  mqttReconnect();
+
   server.on("/fetch", []() {
   fetchBinary(LOCAL_IP_A, "/firmware_a.bin");
   fetchBinary(LOCAL_IP_B, "/firmware_b.bin");
@@ -97,11 +158,16 @@ void setup() {
 void loop() {
   server.handleClient();
 
-  if (millis() - lastCheck > CHECK_INTERVAL) {
-    lastCheck = millis();
-    checkForUpdate();
-    //newUpdateAvailable();
+  if (!mqtt.connected()) {
+    mqttReconnect();
   }
+  mqtt.loop();
+
+  //if (millis() - lastCheck > CHECK_INTERVAL) {
+    //lastCheck = millis();
+    //checkForUpdate();
+    //newUpdateAvailable();
+  //}
 
 }
 
@@ -215,9 +281,11 @@ uint32_t crc32(uint8_t* image, uint32_t image_size, uint32_t field_offset) {
 // You can access relevant sections by just using the name of the file, no need to deal with addresses
 // currently the file name is firmware.bin, will likely change later...
 void fetchBinary(const char* url, const char* filename) {
+  WiFiClientSecure client;
+  client.setInsecure();
   HTTPClient http;
-  // Update this URL when the host PC IP or filename changes
-  http.begin(url);
+  http.begin(client, url);
+  http.setFollowRedirects(HTTPC_STRICT_FOLLOW_REDIRECTS);
   int httpCode = http.GET();
   
   if (httpCode == 200) {
@@ -305,6 +373,7 @@ void handleVerify() {
     response += "\n";
   }
 
+  Serial.println(response);
   server.send(200, "text/plain", response);
 }
 
@@ -313,8 +382,11 @@ void handleVerify() {
 // If a newer version is available, triggers fetchBinary() to download the new firmware
 // and updates currentVersion to reflect the installed version.
 void checkForUpdate() {
+  WiFiClientSecure client;
+  client.setInsecure();
   HTTPClient http;
-  http.begin(VERSION_TXT);
+  http.begin(client, VERSION_TXT);
+  http.setFollowRedirects(HTTPC_STRICT_FOLLOW_REDIRECTS);
   int httpCode = http.GET();
   if (httpCode == 200) {
     String body = http.getString();

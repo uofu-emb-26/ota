@@ -3,13 +3,13 @@
 ## Overview
 The ESP32 acts as a WiFi-to-UART middleman. It fetches a firmware binary
 from a host PC over WiFi and stores it in flash, then forwards it to an
-STM32 over UART2. It also polls the host PC periodically for new versions
-and updates automatically when one is available.
+STM32 over UART2. Updates are triggered via MQTT messages sent through
+HiveMQ Cloud, no local server required.
 
 ## Requirements
 - PlatformIO extension in VS Code
-- Python 3 installed on host PC
-- ESP32 and host PC on the same WiFi network
+- ESP32 on any WiFi network with internet access
+- HiveMQ Cloud account (free tier)
 - Make sure 2.4GHz is enabled when using hotspot
 
 ## Setup
@@ -28,58 +28,32 @@ http.begin("http://<your-PC-IP>:8080/yourfile.bin");  // in fetchBinary()
 http.begin("http://<your-PC-IP>:8080/version.txt");   // in checkForUpdate()
 ```
 
-To get IP:
-```bash
-# Mac/Linux
-ipconfig getifaddr en0
+### Configure MQTT credentials
 
-# Windows
-ipconfig
+In src/main.cpp, update with your HiveMQ cluster details:
+
+```cpp
+#define MQTT_BROKER "your-cluster.hivemq.cloud"
+#define MQTT_USER   "your_username"
+#define MQTT_PASS   "your_password"
 ```
-
 
 ### 3. Build and upload
 - Through PlatformIO menu, select Build
 - Once that is done and device is connected, select Upload and Monitor
 
-### 4. Find the ESP32 IP address
-Open the Serial Monitor (plug icon, 115200 baud). You should see:
-```
-Connected! IP: 192.168.x.x
-```
 
-### 5. Start the HTTP server on your PC
-Navigate to the folder containing your `.bin` and `version.txt` files:
-```bash
-# Mac/Linux
-python3 -m http.server 8080
 
-# Windows
-python -m http.server 8080
-```
+## Sending Commands via MQTT
 
-## Automatic Update Polling
-The ESP32 checks for updates every 30 seconds by fetching `version.txt`
-from the host PC and comparing it to the current version. If the server
-version is higher, it automatically fetches and stores the new binary.
-
-To release a new version:
-1. Replace the `.bin` file on your PC with the new binary
-2. Increment the number in `version.txt` (e.g. `1` -> `2`)
-
-To change the polling interval, update `CHECK_INTERVAL` in `main.cpp`:
-```cpp
-const unsigned long CHECK_INTERVAL = 30000; // milliseconds
-```
-
-## HTTP Endpoints
-| Endpoint | Description |
+Go to the HiveMQ Cloud web client, connect using your credentials, and publish
+to topic ota/update with one of these messages:
+| Message | Description |
 |---|---|
-| `/fetch` | Manually fetch binary from host PC and store in flash |
-| `/verify` | Read stored binary, print size and first 16 bytes |
-| `/send_binary` | Send stored binary over UART2 to STM32 |
-| `/send?msg=hello` | Send a text message over UART2 |
-| `/flash` | Blink onboard LED 5 times (connectivity test) |
+| `check_update` | Fetch version.txt from GitHub and update if newer version found |
+| `fetch` | Force fetch both binaries from GitHub regardless of version |
+| `verify` | Print size and first 16 bytes of stored binaries to serial monitor |
+| `flash` | Blink onboard LED 5 times (connectivity test) |
 
 ## Hardware Wiring (ESP32 to STM32)
 | ESP32 | STM32 |
