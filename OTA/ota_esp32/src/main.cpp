@@ -21,7 +21,6 @@
 #define LOCAL_IP_B  "https://raw.githubusercontent.com/anton2uha/OTAfiles/main/OTA_app_b.bin"
 #define VERSION_TXT "https://raw.githubusercontent.com/anton2uha/OTAfiles/main/version.txt"
 
-#define MQTT_BROKER "d8572968555946a9b813068561cedb0f.s1.eu.hivemq.cloud"
 #define MQTT_PORT   8883  // TLS port
 #define MQTT_USER   "OTAupdate"
 #define MQTT_PASS   "Update123"
