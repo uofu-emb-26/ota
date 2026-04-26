@@ -10,12 +10,12 @@
 #include <esp_rom_crc.h>
 #include <WiFiClientSecure.h>
 #include <PubSubClient.h>
+#include "config.h"
 
 #define CRC_OFFSET  0xD0
 #define LED_DELAY 250U
 #define BINARY_MAX_SIZE 14000 // current size is 12708, could change later
-#define SSID "x"
-#define PASS "x"
+
 
 #define LOCAL_IP_A  "https://raw.githubusercontent.com/anton2uha/OTAfiles/main/OTA_app_a.bin"
 #define LOCAL_IP_B  "https://raw.githubusercontent.com/anton2uha/OTAfiles/main/OTA_app_b.bin"
@@ -25,7 +25,6 @@
 #define MQTT_PORT   8883  // TLS port
 #define MQTT_USER   "OTAupdate"
 #define MQTT_PASS   "Update123"
-#define MQTT_TOPIC  "ota/update"
 
 WiFiClientSecure tlsClient;
 PubSubClient mqtt(tlsClient);
