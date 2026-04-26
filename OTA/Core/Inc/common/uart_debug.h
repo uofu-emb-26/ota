@@ -1,7 +1,7 @@
 #ifndef UART_DEBUG_H
 #define UART_DEBUG_H
 
-#define DEBUG_UART_ENABLE    1U
+#define DEBUG_UART_ENABLE    0U
 
 /**
  * @brief  Initialise USART4 TX for debug output.

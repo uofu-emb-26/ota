@@ -272,14 +272,14 @@ int main(void)
   Enable_TX_RX();
   Enable_USART_Control();
 
-  /*GPIO_InitTypeDef initStr2 = {GPIO_PIN_0, //Pushbutton
+  GPIO_InitTypeDef initStr2 = {GPIO_PIN_0, //Pushbutton
                               GPIO_MODE_INPUT,
                               GPIO_PULLDOWN,
                               GPIO_SPEED_FREQ_LOW};
 
                               HAL_GPIO_Init(GPIOA,&initStr2);
-*/
-  //button_interrupt_config();
+
+  button_interrupt_config();
   __NVIC_EnableIRQ(EXTI0_1_IRQn);
   NVIC_SetPriority(EXTI0_1_IRQn,1);
 
@@ -292,6 +292,7 @@ int main(void)
   uint8_t val = 0;
   const ota_image_info_t *image_info = ota_get_running_image_info();
 
+  #if (DEBUG_UART_ENABLE == 1U)
   uart_debug_transmit("App running in Slot ");
   if (current_slot == OTA_SLOT_A) {
     uart_debug_transmit("A\r\n");
@@ -305,8 +306,9 @@ int main(void)
   (void)dormant_slot;
   (void)image_info;
 
-   
-  #if (DEBUG_UART_ENABLE == 1U)
+
+
+  
   //HAL_UARTEx_ReceiveToIdle_DMA(&huart4, recieved_data, sizeof(recieved_data));
   #endif /* DEBUG_UART_ENABLE */
   
@@ -409,6 +411,7 @@ void SystemClock_Config(void)
 
 void EXTI0_1_IRQHandler(void){
   count = 0;
+  EXTI->PR = 0x1;
 }
 
 // /**
