@@ -437,9 +437,6 @@ void checkForUpdate() {
   } else {
     Serial.print("http.GET failed - not 200 return ");
   }
-  else {
-    Serial.print("http.GET failed - not 200 return ");
-  }
   http.end();
 }
 
