@@ -11,10 +11,10 @@
 
 #define LED_DELAY 250U
 #define BINARY_MAX_SIZE 14000 // current size is 12708, could change later
-#define SSID "x"
-#define PASS "x"
-#define LOCAL_IP "x"
-#define VERSION_TXT "x"
+#define SSID "LeChalet2.4Gz"
+#define PASS "1001ABNBEmpire!"
+#define LOCAL_IP "http://10.0.0.88:8080/OTA_app_a.bin"
+#define VERSION_TXT "http://10.0.0.88:8080/version.txt"
 
 // put function declarations here:
 int myFunction(int, int);
@@ -27,7 +27,7 @@ void readBinaryFromLittleFS(uint8_t* buffer, int* size);
 void handleVerify();
 void handleSendBinary();
 void checkForUpdate();
-void newUpdateAvailable();
+void newUpdateAvailable(int val);
 void flush_read_buffer();
 void handleCriticalFailure();
 void enterSendLoop();
@@ -145,7 +145,9 @@ void newUpdateAvailable(int attempt_count)
     sendPartialBinary();
   }else if (response == 1) /* STM32 wants a 1-Minute Delay On This Path*/
   {
-    Serial.println("stm32 requested wait " + attempt_count + " times"); //print number of times wait requested
+    Serial.print("stm32 requested wait");
+    Serial.print(attempt_count);
+    Serial.println("times"); //print number of times wait requested
     delay(60000); ////delay for a minute this is millisecond value
     attempt_count++;
     newUpdateAvailable(attempt_count);
@@ -317,10 +319,10 @@ void sendPartialBinary() {
 
   for (int location = 0; location <= size -2; location += 2) 
   {
-    /* 		[1][x][x] - Half word data transmission */
+    // /* 		[1][x][x] - Half word data transmission */
     uint8_t data_transmission[] = {0x01, binaryBuffer[location], binaryBuffer[location + 1]};
     Serial.println("Looping in sendPartialBinary");
-    Serial.print("Sending 2 bytes from location: ");
+    Serial.print("Sending 3 bytes from location: ");
     Serial.println(location);
     Serial.println("Sending this data: ");
     Serial.print("flag byte: ");
@@ -330,38 +332,58 @@ void sendPartialBinary() {
     Serial.print(",");
     Serial.println(data_transmission[2]);
     //send the data
+    Serial.write(data_transmission, 3);
+    Serial.println();
     Serial2.write(data_transmission, 3);
-    // Serial.println("Sent " + String(3) + " bytes over UART");
-    Serial.write(data_transmission,3);
+    Serial.println("Sent " + String(3) + " bytes over UART");
+
+    // Serial2.write(1);
+    // // Serial.write(1);
+    // Serial.print("flag byte: ");
+    // Serial.println(1);
+    // Serial2.write(binaryBuffer[location]);
+    // // Serial.write(binaryBuffer[location]);
+    // Serial.println(binaryBuffer[location]);
+    // Serial2.write(binaryBuffer[location + 1]);
+    // // Serial.write(binaryBuffer[location + 1]);
+    // Serial.println(binaryBuffer[location + 1]);
+
+
+
+    // Serial.write(data_transmission,3);
     server.send(200, "text/plain", "Sent " + String(3) + " bytes over UART");  
 
-    //check to make sure the STM is good for more data
+    // //check to make sure the STM is good for more data
     uint8_t response = waitForSTMResponse();
+    Serial.print("STM's Response to this transaction: ");
     Serial.println(response);
-    if (response != 0xFF) {
-      continue;
-    }
-    else {
-      handleCriticalFailure();
-      break;
-    }
+    // if (response != 0xFF) {
+    //   continue;
+    // }
+    // else {
+    //   handleCriticalFailure();
+    //   break;
+    // }
   }
-
-  //send CRC value, we finishe transmitting all the data
-  /* 	[2][x][x] - Transmission complete stop byte (must send 3 bytes still) */
-  uint8_t crc_data[] = {0x1,0x2};
-  uint8_t data_transmission[] = {0x02, crc_data[0], crc_data[1]};
-  uint8_t response = waitForSTMResponse();
-  if (response != 0xFF ) {
+  Serial.println("Sending the three 0's");
+  Serial2.write(0);
+  Serial2.write(0);
+  Serial2.write(0);
+  // //send CRC value, we finishe transmitting all the data
+  // /* 	[2][x][x] - Transmission complete stop byte (must send 3 bytes still) */
+  // uint8_t crc_data[] = {0x1,0x2};
+  // uint8_t data_transmission[] = {0x02, crc_data[0], crc_data[1]};
+  // uint8_t response = waitForSTMResponse();
+  // if (response != 0xFF ) {
     
-    //made it to the EOF and send CRC already, the response from the STM32 is good
-    /* 	[0][x][x] - Transmission complete stop byte (must send 3 bytes still) */
-    uint8_t data_transmission[] = {0x00, 0x99, 0x99};
-    uint8_t response = waitForSTMResponse();
-    if (response == 0x00 ) {
-      handleSuccessfulUpdate();
-      return;
-    }
-  }
-  handleCriticalFailure();
+  //   //made it to the EOF and send CRC already, the response from the STM32 is good
+  //   /* 	[0][x][x] - Transmission complete stop byte (must send 3 bytes still) */
+  //   uint8_t data_transmission[] = {0x00, 0x99, 0x99};
+  //   uint8_t response = waitForSTMResponse();
+  //   if (response == 0x00 ) {
+  //     handleSuccessfulUpdate();
+  //     return;
+  //   }
+  // }
+  // handleCriticalFailure();
 }

@@ -330,7 +330,7 @@ int main(void)
     uint8_t write_result = 99;
 
     /* 4. if(0) -> call int flash_write_from_uart(USART_TypeDefuart, uint32_t page_total) */
-    if (val == 0x0) {
+    if (val == 0x0 | val == 0x30) {
       write_result = flash_write_from_uart(USART3, 27);
     }
     //  5. add an led function after the write based off the return value 

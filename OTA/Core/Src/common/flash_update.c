@@ -161,7 +161,6 @@ int flash_write_from_uart(USART_TypeDef *uart, uint32_t page_total){ //assumes f
     } else if(current_slot == 2){
         write_address = 0x08004000;
     } else {
-        led_on();
         transmit_char(0xFF, uart);
         return -1;
     }
@@ -171,6 +170,9 @@ int flash_write_from_uart(USART_TypeDef *uart, uint32_t page_total){ //assumes f
     if (flash_clr_upd_region(write_address, page_total) != 0) {
       return -1;
     }
+
+    flash_unlock();
+
     do {
       
       transmit_char(0, uart); //TODO THIS FUNCTION EXPLICITLY EXCEPTS BEHAVIOR COULD BE ADDED
@@ -183,18 +185,19 @@ int flash_write_from_uart(USART_TypeDef *uart, uint32_t page_total){ //assumes f
       write_data = (((uint16_t)first_byte << 8) | ((uint16_t)second_byte));
 
       if (type_byte == 0) {
+        flash_lock();
         break;
       } else if (type_byte == 1) {
 
         if ((write_address + 1) >= memory_end) {
-            led_on();
-          transmit_char(0xFF, uart);
+          transmit_char(0xFE, uart);
+          flash_lock();
           return -1;
         }
-
+        
         if (flash_write(write_address, write_data) != 0) {
-          led_on();
-            transmit_char(0xFF, uart);
+            transmit_char(0xFD, uart);
+            flash_lock();
           return -1;
         }
 
@@ -205,8 +208,8 @@ int flash_write_from_uart(USART_TypeDef *uart, uint32_t page_total){ //assumes f
         // placeholder for crc_value handling or other data_type handling
         transmit_char(2, uart);
       } else {
-        led_on();
-        transmit_char(0xFF, uart);
+        transmit_char(0xFC, uart);
+        flash_lock();
         return -1;
       }
 
