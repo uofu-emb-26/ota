@@ -4,3 +4,4 @@
 .vscode/launch.json
 .vscode/ipch
 include/sensitive_data.h
+ota/OTA/ota_esp32/include/sensitive_data.h

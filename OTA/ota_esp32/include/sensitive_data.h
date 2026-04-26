@@ -1,6 +1,5 @@
-//Add this file to git ignore then update this file with your actual passwords and ip info
-#define SSID "Jeffrey's S24 Ultra"
-#define PASS "gmuo234!"
-#define Local_IP "10.234.41.56"
-#define UPDATE_VERSION_URL "http://10.234.41.56:8000/version.txt"
-#define UPDATE_BINARY_URL "http://10.234.41.56:8000/OTA_app_a.bin"
+//Create sensitive_data.h and copy this template to it then add your actual info
+#define SSID "LeChalet2.4Gz"
+#define PASS "1001ABNBEmpire!"
+#define LOCAL_IP "http://10.0.0.88:8080/OTA_app_a.bin"
+#define VERSION_TXT "http://10.0.0.88:8080/version.txt"
