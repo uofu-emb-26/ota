@@ -37,6 +37,15 @@ void sendPartialBinary();
 const char* ssid = SSID;
 const char* password = PASS;
 
+typedef enum
+{
+  Write_Address_Slot_Error = -1, //0xFF
+  Write_Address_Overflow = -2, //0xFE
+  Write_Error = -3, //0xFD
+  Other_Error = -4, // 0xFC
+
+} error_enums;
+
 unsigned long lastCheck = 0;
 const unsigned long CHECK_INTERVAL = 10000; // check every 30 seconds
 int currentVersion = 1;
@@ -334,18 +343,6 @@ void sendPartialBinary() {
     Serial2.write(data_transmission, 3);
     Serial.println("Sent " + String(3) + " bytes over UART");
 
-    // Serial2.write(1);
-    // // Serial.write(1);
-    // Serial.print("flag byte: ");
-    // Serial.println(1);
-    // Serial2.write(binaryBuffer[location]);
-    // // Serial.write(binaryBuffer[location]);
-    // Serial.println(binaryBuffer[location]);
-    // Serial2.write(binaryBuffer[location + 1]);
-    // // Serial.write(binaryBuffer[location + 1]);
-    // Serial.println(binaryBuffer[location + 1]);
-
-
 
     // Serial.write(data_transmission,3);
     server.send(200, "text/plain", "Sent " + String(3) + " bytes over UART");  
@@ -354,13 +351,27 @@ void sendPartialBinary() {
     uint8_t response = waitForSTMResponse();
     Serial.print("STM's Response to this transaction: ");
     Serial.println(response);
-    // if (response != 0xFF) {
-    //   continue;
-    // }
-    // else {
-    //   handleCriticalFailure();
-    //   break;
-    // }
+
+    if (response == Write_Error) 
+    {
+      Serial.println("Error - failed writing byte to flash - stopping transmission");  
+      break;
+    }
+    else if (Write_Address_Overflow) 
+    {
+      Serial.println("Error - write address overflow occured - stopping transmission");
+      break;
+    }
+    else if (Write_Address_Slot_Error) 
+    {
+      Serial.println("Error - unable to find slot address - stopping transmission");
+      break;
+    }
+    else if (Other_Error) 
+    {
+      Serial.println("Error - other issue occured - stopping transmission");
+      break;
+    }
   }
   Serial.println("Sending the three 0's");
   Serial2.write(0);
