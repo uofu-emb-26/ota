@@ -8,13 +8,10 @@
 #include <HTTPClient.h>
 #include <LittleFS.h>
 #include <stdint.h>
+#include <sensitive_data.h>
 
 #define LED_DELAY 250U
 #define BINARY_MAX_SIZE 14000 // current size is 12708, could change later
-#define SSID "x"
-#define PASS "x"
-#define LOCAL_IP "x"
-#define VERSION_TXT "x"
 
 // put function declarations here:
 int myFunction(int, int);
@@ -208,7 +205,7 @@ void handleSend() {
 void fetchBinary() {
   HTTPClient http;
   // Update this URL when the host PC IP or filename changes
-  http.begin(LOCAL_IP);
+  http.begin(UPDATE_VERSION_URL);
   int httpCode = http.GET();
   
   if (httpCode == 200) {
@@ -273,7 +270,7 @@ void handleVerify() {
 // and updates currentVersion to reflect the installed version.
 void checkForUpdate() {
   HTTPClient http;
-  http.begin(VERSION_TXT);
+  http.begin(UPDATE_BINARY_URL);
   int httpCode = http.GET();
   if (httpCode == 200) {
     String versionStr = http.getString();
