@@ -185,7 +185,7 @@ int flash_write_from_uart(USART_TypeDef *uart, uint32_t page_total){ //assumes f
       first_byte = receive_char(uart);
       second_byte = receive_char(uart);
         // led_off();
-      write_data = (((uint16_t)first_byte << 8) | ((uint16_t)second_byte));
+      write_data = (((uint16_t)second_byte << 8) | ((uint16_t)first_byte));
 
       if (type_byte == 0) {
         flash_lock();
