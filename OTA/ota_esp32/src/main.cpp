@@ -8,13 +8,10 @@
 #include <HTTPClient.h>
 #include <LittleFS.h>
 #include <stdint.h>
+#include <sensitive_data.h>
 
 #define LED_DELAY 250U
 #define BINARY_MAX_SIZE 14000 // current size is 12708, could change later
-#define SSID "x"
-#define PASS "x"
-#define LOCAL_IP "x"
-#define VERSION_TXT "x"
 
 // put function declarations here:
 int myFunction(int, int);
@@ -27,7 +24,7 @@ void readBinaryFromLittleFS(uint8_t* buffer, int* size);
 void handleVerify();
 void handleSendBinary();
 void checkForUpdate();
-void newUpdateAvailable();
+void newUpdateAvailable(int val);
 void flush_read_buffer();
 void handleCriticalFailure();
 void enterSendLoop();
@@ -145,7 +142,9 @@ void newUpdateAvailable(int attempt_count)
     sendPartialBinary();
   }else if (response == 1) /* STM32 wants a 1-Minute Delay On This Path*/
   {
-    Serial.println("stm32 requested wait " + attempt_count + " times"); //print number of times wait requested
+    Serial.println("stm32 requested wait ");
+    Serial.println(attempt_count); 
+    Serial.println(" times"); //print number of times wait requested
     delay(60000); ////delay for a minute this is millisecond value
     attempt_count++;
     newUpdateAvailable(attempt_count);
@@ -206,7 +205,7 @@ void handleSend() {
 void fetchBinary() {
   HTTPClient http;
   // Update this URL when the host PC IP or filename changes
-  http.begin(LOCAL_IP);
+  http.begin(UPDATE_VERSION_URL);
   int httpCode = http.GET();
   
   if (httpCode == 200) {
@@ -271,7 +270,7 @@ void handleVerify() {
 // and updates currentVersion to reflect the installed version.
 void checkForUpdate() {
   HTTPClient http;
-  http.begin(VERSION_TXT);
+  http.begin(UPDATE_BINARY_URL);
   int httpCode = http.GET();
   if (httpCode == 200) {
     String versionStr = http.getString();

@@ -31,10 +31,10 @@ http.begin("http://<your-PC-IP>:8080/version.txt");   // in checkForUpdate()
 To get IP:
 ```bash
 # Mac/Linux
-ipconfig getifaddr en0
+ifconfig getifaddr en0
 
 # Windows
-ipconfig
+ipconfigip
 ```
 
 
