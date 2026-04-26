@@ -1,3 +1,5 @@
 build
 mx.scratch
 !.settings
+
+ota_esp32/src/config.h
