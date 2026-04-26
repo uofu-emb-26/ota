@@ -52,6 +52,8 @@ void sendPartialBinary();
 const char* ssid = SSID;
 const char* password = PASS;
 
+bool update_available = false;
+
 unsigned long lastCheck = 0;
 const unsigned long CHECK_INTERVAL = 30000; // check every 30 seconds
 
@@ -76,7 +78,7 @@ void mqttCallback(char* topic, byte* payload, unsigned int length) {
   } else if (message == "fetch") {
     Serial.println("MQTT: force fetch command received");
     fetchBinary(LOCAL_IP_A, "/firmware_a.bin");
-    fetchBinary(LOCAL_IP_B, "/firmware_b.bin");
+    fetchBinary(LOCAL_IP_B, "/firmware_b.bin"); //TODO ADD LOGIC HERE FOR WHICH BINARY
   } else if (message == "verify") {
     Serial.println("MQTT: verify command received");
     handleVerify();
@@ -167,21 +169,27 @@ void loop() {
 
   //COMMSV1 STUFF ----------------------
   //update the binary with the new version
-  Serial.print("checking for update");
-  checkForUpdate();
+  //Serial.print("Update sent");
+  //checkForUpdate();
 
-  Serial.println("Reset STM now");
-  delay(10000);
+  
 
   // if (millis() - lastCheck > CHECK_INTERVAL) {
   //   lastCheck = millis();
     // if (count == 0)
     // {
   // Serial.print("right above new update available");
+  if(update_available){
+    Serial.print("Update sent");
+    
+    delay(10000);
+    Serial.println("Reset STM now");
+    delay(5000);
+    newUpdateAvailable(1);
+    update_available = false;
+  }
 
-  newUpdateAvailable(1);
-
-  delay(6000000);
+  //delay(6000000);
       // count += 1;
     // }
     // newUpdateAvailable();
@@ -327,6 +335,7 @@ void fetchBinary(const char* url, const char* filename) {
     } else {
       Serial.println("CRC mismatch — binary may be corrupt");
     }
+    update_available = true; // TODO move to crc checks once setup
   } else {
     Serial.println("HTTP GET failed: " + String(httpCode));
   }
@@ -466,43 +475,43 @@ void sendPartialBinary() {
   for (int location = 0; location <= size -2; location += 2)
   {
     // /* 		[1][x][x] - Half word data transmission */
-    uint8_t data_transmission[] = {0x01, binaryBuffer[location], binaryBuffer[location + 1]};
-    Serial.println("Looping in sendPartialBinary");
-    Serial.print("Sending 3 bytes from location: ");
-    Serial.println(location);
-    Serial.println("Sending this data: ");
-    Serial.print("flag byte: ");
-    Serial.println(data_transmission[0]);
-    Serial.print("data bytes: ");
-    Serial.print(data_transmission[1]);
-    Serial.print(",");
-    Serial.println(data_transmission[2]);
-    //send the data
-    Serial.write(data_transmission, 3);
-    Serial.println();
-    Serial2.write(data_transmission, 3);
-    Serial.println("Sent " + String(3) + " bytes over UART");
-
-    // Serial2.write(1);
-    // // Serial.write(1);
+    // uint8_t data_transmission[] = {0x01, binaryBuffer[location], binaryBuffer[location + 1]};
+    // Serial.println("Looping in sendPartialBinary");
+    // Serial.print("Sending 3 bytes from location: ");
+    // Serial.println(location);
+    // Serial.println("Sending this data: ");
     // Serial.print("flag byte: ");
-    // Serial.println(1);
-    // Serial2.write(binaryBuffer[location]);
-    // // Serial.write(binaryBuffer[location]);
-    // Serial.println(binaryBuffer[location]);
-    // Serial2.write(binaryBuffer[location + 1]);
-    // // Serial.write(binaryBuffer[location + 1]);
-    // Serial.println(binaryBuffer[location + 1]);
+    // Serial.println(data_transmission[0]);
+    // Serial.print("data bytes: ");
+    // Serial.print(data_transmission[1]);
+    // Serial.print(",");
+    // Serial.println(data_transmission[2]);
+    // //send the data
+    // Serial.write(data_transmission, 3);
+    // Serial.println();
+    // Serial2.write(data_transmission, 3);
+    // Serial.println("Sent " + String(3) + " bytes over UART");
+
+    Serial2.write(1);
+    //Serial.write(1);
+    //Serial.print("flag byte: ");
+    //Serial.println(1);
+    Serial2.write(binaryBuffer[location]);
+    //Serial.write(binaryBuffer[location]);
+    //Serial.println(binaryBuffer[location]);
+    Serial2.write(binaryBuffer[location + 1]);
+    // Serial.write(binaryBuffer[location + 1]);
+    //Serial.println(binaryBuffer[location + 1]);
 
 
 
     // Serial.write(data_transmission,3);
-    server.send(200, "text/plain", "Sent " + String(3) + " bytes over UART");
+    //server.send(200, "text/plain", "Sent " + String(3) + " bytes over UART");
 
     // //check to make sure the STM is good for more data
     uint8_t response = waitForSTMResponse();
-    Serial.print("STM's Response to this transaction: ");
-    Serial.println(response);
+    //Serial.print("STM's Response to this transaction: ");
+    //Serial.println(response);
     // if (response != 0xFF) {
     //   continue;
     // }
