@@ -55,9 +55,11 @@
 /* USER CODE END 0 */
 
 /* External variables --------------------------------------------------------*/
-extern DMA_HandleTypeDef hdma_usart4_rx;
-extern DMA_HandleTypeDef hdma_usart4_tx;
-extern UART_HandleTypeDef huart4;
+#if (DEBUG_UART_ENABLE == 1U)
+// extern DMA_HandleTypeDef hdma_usart4_rx;
+// extern DMA_HandleTypeDef hdma_usart4_tx;
+// extern UART_HandleTypeDef huart4;
+#endif /* DEBUG_UART_ENABLE */
 /* USER CODE BEGIN EV */
 
 /* USER CODE END EV */

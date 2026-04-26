@@ -8,6 +8,7 @@ cmake_minimum_required(VERSION 3.22)
 #
 
 # Setup compiler settings
+set(OTA_APP_FIRMWARE_VERSION 102)
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)
 set(CMAKE_C_EXTENSIONS ON)
@@ -50,8 +51,12 @@ set(OTA_APP_COMMON_SOURCES
     Core/Src/common/sysmem.c
     Core/Src/common/syscalls.c
     Core/Src/common/flash_update.c
+    Core/Src/common/ota_image_info.c
     Core/Src/common/ota_metadata.c
+    Core/Src/common/uart_debug.c
     Core/Src/app/hal_gpio.c
+    Core/Src/common/sysmem.c
+    Core/Src/common/led.c
 )
 
 add_executable(OTA_app_a ${OTA_APP_COMMON_SOURCES})
@@ -60,7 +65,7 @@ target_link_libraries(OTA_app_a
     STM32_Drivers
     m
 )
-target_compile_definitions(OTA_app_a PRIVATE OTA_APP_SLOT_A=1)
+target_compile_definitions(OTA_app_a PRIVATE FIRMWARE_VERSION=${OTA_APP_FIRMWARE_VERSION})
 target_link_options(OTA_app_a PRIVATE
     -T "${CMAKE_SOURCE_DIR}/STM32F072_APP_A.ld"
     -Wl,-Map=OTA_app_a.map
@@ -68,7 +73,7 @@ target_link_options(OTA_app_a PRIVATE
 )
 set_target_properties(OTA_app_a PROPERTIES
     LINK_DEPENDS "${CMAKE_SOURCE_DIR}/STM32F072_APP_A.ld"
-    ADDITIONAL_CLEAN_FILES "OTA_app_a.map"
+    ADDITIONAL_CLEAN_FILES "OTA_app_a.map;OTA_app_a.hex;OTA_app_a.bin"
 )
 
 add_executable(OTA_app_b ${OTA_APP_COMMON_SOURCES})
@@ -77,7 +82,7 @@ target_link_libraries(OTA_app_b
     STM32_Drivers
     m
 )
-target_compile_definitions(OTA_app_b PRIVATE OTA_APP_SLOT_B=1)
+target_compile_definitions(OTA_app_b PRIVATE FIRMWARE_VERSION=${OTA_APP_FIRMWARE_VERSION})
 target_link_options(OTA_app_b PRIVATE
     -T "${CMAKE_SOURCE_DIR}/STM32F072_APP_B.ld"
     -Wl,-Map=OTA_app_b.map
@@ -85,7 +90,7 @@ target_link_options(OTA_app_b PRIVATE
 )
 set_target_properties(OTA_app_b PROPERTIES
     LINK_DEPENDS "${CMAKE_SOURCE_DIR}/STM32F072_APP_B.ld"
-    ADDITIONAL_CLEAN_FILES "OTA_app_b.map"
+    ADDITIONAL_CLEAN_FILES "OTA_app_b.map;OTA_app_b.hex;OTA_app_b.bin"
 )
 
 # ---------------------------------------------------------------------------
@@ -95,11 +100,13 @@ add_executable(OTA_bootloader
     startup_stm32f072xb.s
     Core/Src/common/flash_update.c
     Core/Src/common/ota_metadata.c
+    Core/Src/common/uart_debug.c
     Core/Src/boot/bootloader.c
     Core/Src/boot/bootloader_main.c
     Core/Src/boot/bootloader_it.c
     Core/Src/common/syscalls.c
     Core/Src/common/sysmem.c
+    Core/Src/common/led.c
 )
 
 target_link_libraries(OTA_bootloader
@@ -114,9 +121,54 @@ target_link_options(OTA_bootloader PRIVATE
     -Wl,--print-memory-usage
 )
 
+target_compile_definitions(OTA_bootloader PRIVATE
+    FIRMWARE_VERSION=1
+)
+
 set_target_properties(OTA_bootloader PROPERTIES
     LINK_DEPENDS "${CMAKE_SOURCE_DIR}/STM32F072_BOOTLOADER.ld"
-    ADDITIONAL_CLEAN_FILES "OTA_bootloader.map"
+    ADDITIONAL_CLEAN_FILES "OTA_bootloader.map;OTA_bootloader.bin;OTA_bootloader.hex"
+)
+
+# ---------------------------------------------------------------------------
+# CRC stamping helper for OTA app images
+# ---------------------------------------------------------------------------
+set(OTA_IMAGE_INFO_OFFSET 192)
+set(OTA_IMAGE_INFO_MAGIC 0x534A4E41)
+
+# ---------------------------------------------------------------------------
+# Additional build steps to generate .hex and .bin files for the applications
+# ---------------------------------------------------------------------------
+add_custom_command(TARGET OTA_app_a POST_BUILD
+    COMMAND arm-none-eabi-objcopy -O binary
+    $<TARGET_FILE:OTA_app_a>
+    ${CMAKE_CURRENT_BINARY_DIR}/OTA_app_a.bin
+    COMMAND python3 ${CMAKE_SOURCE_DIR}/tools/ota_patch_image_crc.py
+            --elf $<TARGET_FILE:OTA_app_a>
+            --bin ${CMAKE_CURRENT_BINARY_DIR}/OTA_app_a.bin
+            --objcopy arm-none-eabi-objcopy
+            --manifest-offset ${OTA_IMAGE_INFO_OFFSET}
+            --magic ${OTA_IMAGE_INFO_MAGIC}
+    COMMAND arm-none-eabi-objcopy -O ihex
+            $<TARGET_FILE:OTA_app_a>
+            ${CMAKE_CURRENT_BINARY_DIR}/OTA_app_a.hex
+    COMMENT "Generating OTA_app_a.bin/.hex with stamped image CRC"
+)
+
+add_custom_command(TARGET OTA_app_b POST_BUILD
+    COMMAND arm-none-eabi-objcopy -O binary
+    $<TARGET_FILE:OTA_app_b>
+    ${CMAKE_CURRENT_BINARY_DIR}/OTA_app_b.bin
+    COMMAND python3 ${CMAKE_SOURCE_DIR}/tools/ota_patch_image_crc.py
+            --elf $<TARGET_FILE:OTA_app_b>
+            --bin ${CMAKE_CURRENT_BINARY_DIR}/OTA_app_b.bin
+            --objcopy arm-none-eabi-objcopy
+            --manifest-offset ${OTA_IMAGE_INFO_OFFSET}
+            --magic ${OTA_IMAGE_INFO_MAGIC}
+    COMMAND arm-none-eabi-objcopy -O ihex
+            $<TARGET_FILE:OTA_app_b>
+            ${CMAKE_CURRENT_BINARY_DIR}/OTA_app_b.hex
+    COMMENT "Generating OTA_app_b.bin/.hex with stamped image CRC"
 )
 
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
@@ -124,3 +176,4 @@ include(flash_stm32)
 flash_target(OTA_bootloader)
 flash_target(OTA_app_a)
 flash_target(OTA_app_b)
+erase_flash_target()
