@@ -173,9 +173,12 @@ int flash_write_from_uart(USART_TypeDef *uart, uint32_t page_total){ //assumes f
 
     flash_unlock();
 
+    transmit_char(0, uart); //TODO THIS FUNCTION EXPLICITLY EXCEPTS BEHAVIOR COULD BE ADDED
+                              //DICTATING WAIT OR DENY
+
     do {
       
-      transmit_char(0, uart); //TODO THIS FUNCTION EXPLICITLY EXCEPTS BEHAVIOR COULD BE ADDED
+      //transmit_char(0, uart); //TODO THIS FUNCTION EXPLICITLY EXCEPTS BEHAVIOR COULD BE ADDED
                               //DICTATING WAIT OR DENY
         // led_alternate(100);
       type_byte = receive_char(uart);

@@ -465,6 +465,7 @@ void handleSendBinary() {
 void sendPartialBinary() {
   int size = 0;
   readBinaryFromLittleFS(binaryBuffer, &size, "/firmware_a.bin");
+  uint8_t response;
   
   if (size == 0) {
     server.send(500, "text/plain", "Failed to read binary from LittleFS");
@@ -508,7 +509,10 @@ void sendPartialBinary() {
     //server.send(200, "text/plain", "Sent " + String(3) + " bytes over UART");
 
     // //check to make sure the STM is good for more data
-    uint8_t response = waitForSTMResponse();
+    response = waitForSTMResponse();
+    if(response != 1){
+      Serial.println("invalid stm response");
+    }
     //Serial.print("STM's Response to this transaction: ");
     //Serial.println(response);
     // if (response != 0xFF) {
