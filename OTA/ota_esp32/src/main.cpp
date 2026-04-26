@@ -466,8 +466,24 @@ void handleSendBinary() {
 
 void sendPartialBinary() {
   int size = 0;
-  readBinaryFromLittleFS(binaryBuffer, &size, "/firmware_a.bin");
   uint8_t response;
+
+  Serial2.write(5);
+
+  response = waitForSTMResponse();
+
+  if(response == 2){
+    readBinaryFromLittleFS(binaryBuffer, &size, "/firmware_a.bin");
+    Serial.println("reading from firmware_a sending to region A");
+  } else if(response == 1){
+    readBinaryFromLittleFS(binaryBuffer, &size, "/firmware_b.bin");
+    Serial.println("reading from firmware_b sending to region B");
+  } else{
+    Serial.println("you fucked up");
+    handleCriticalFailure();
+    return;
+  }
+  
   
   if (size == 0) {
     server.send(500, "text/plain", "Failed to read binary from LittleFS");
@@ -476,54 +492,17 @@ void sendPartialBinary() {
 
   for (int location = 0; location <= size -2; location += 2)
   {
-    // /* 		[1][x][x] - Half word data transmission */
-    // uint8_t data_transmission[] = {0x01, binaryBuffer[location], binaryBuffer[location + 1]};
-    // Serial.println("Looping in sendPartialBinary");
-    // Serial.print("Sending 3 bytes from location: ");
-    // Serial.println(location);
-    // Serial.println("Sending this data: ");
-    // Serial.print("flag byte: ");
-    // Serial.println(data_transmission[0]);
-    // Serial.print("data bytes: ");
-    // Serial.print(data_transmission[1]);
-    // Serial.print(",");
-    // Serial.println(data_transmission[2]);
-    // //send the data
-    // Serial.write(data_transmission, 3);
-    // Serial.println();
-    // Serial2.write(data_transmission, 3);
-    // Serial.println("Sent " + String(3) + " bytes over UART");
-
     Serial2.write(1);
-    //Serial.write(1);
-    //Serial.print("flag byte: ");
-    //Serial.println(1);
     Serial2.write(binaryBuffer[location]);
-    //Serial.write(binaryBuffer[location]);
-    //Serial.println(binaryBuffer[location]);
     Serial2.write(binaryBuffer[location + 1]);
-    // Serial.write(binaryBuffer[location + 1]);
-    //Serial.println(binaryBuffer[location + 1]);
-
-
-
-    // Serial.write(data_transmission,3);
-    //server.send(200, "text/plain", "Sent " + String(3) + " bytes over UART");
 
     // //check to make sure the STM is good for more data
     response = waitForSTMResponse();
     if(response != 1){
       Serial.println("invalid stm response");
-    }
-    //Serial.print("STM's Response to this transaction: ");
-    //Serial.println(response);
-    // if (response != 0xFF) {
-    //   continue;
-    // }
-    // else {
-    //   handleCriticalFailure();
-    //   break;
-    // }
+      Serial.print(response);
+      break;
+    } 
   }
   Serial.println("Sending the three 0's");
   Serial2.write(0);

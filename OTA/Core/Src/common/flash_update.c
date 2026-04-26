@@ -176,6 +176,15 @@ int flash_write_from_uart(USART_TypeDef *uart, uint32_t page_total){ //assumes f
     transmit_char(0, uart); //TODO THIS FUNCTION EXPLICITLY EXCEPTS BEHAVIOR COULD BE ADDED
                               //DICTATING WAIT OR DENY
 
+    uint8_t slot_request = receive_char(uart);
+
+    if(slot_request == 5){
+        transmit_char(current_slot, uart);
+    } else {
+        transmit_char(0xFB, uart);
+        return -1;
+    }
+
     do {
       
       //transmit_char(0, uart); //TODO THIS FUNCTION EXPLICITLY EXCEPTS BEHAVIOR COULD BE ADDED

@@ -71,6 +71,8 @@ SPI_HandleTypeDef hspi2;
 TSC_HandleTypeDef htsc;
 UART_HandleTypeDef huart3;
 
+volatile static int count = 1;
+
 // uint8_t cmd_arr[3];
 // uint8_t cmd_arr_pointer = 0;
 
@@ -312,6 +314,8 @@ int main(void)
   //HAL_GPIO_WritePin(GPIOC, LED_BLUE_PIN, GPIO_PIN_SET);
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
+
+
   while (1)
   {
     // HAL_Delay(5000);
@@ -320,9 +324,9 @@ int main(void)
     // {
     //   Parse_Program();
     // }
-    volatile static int count = 0;
+    
     /* 3. Call uint8_t receive_char(USART_TypeDef uart) in main and check for a 0 */
-    if (count == 0) {
+    if (count == 0) { // press the button to check for an update
       
     // led_on();
     val = receive_char(USART3);
@@ -404,12 +408,7 @@ void SystemClock_Config(void)
 }
 
 void EXTI0_1_IRQHandler(void){
-  flash_unlock();
-  flash_erase_page(0x08010000);
-  flash_write(0x08010000, 0x0001);
-  flash_lock();
-  EXTI->PR = (1);
-
+  count = 0;
 }
 
 // /**
