@@ -14,8 +14,8 @@
 #define CRC_OFFSET  0xD0
 #define LED_DELAY 250U
 #define BINARY_MAX_SIZE 14000 // current size is 12708, could change later
-#define SSID 
-#define PASS 
+#define SSID "Overheretrebling"
+#define PASS "Purple1!"
 
 #define LOCAL_IP_A  "https://raw.githubusercontent.com/anton2uha/OTAfiles/main/OTA_app_a.bin"
 #define LOCAL_IP_B  "https://raw.githubusercontent.com/anton2uha/OTAfiles/main/OTA_app_b.bin"
@@ -467,6 +467,7 @@ void handleSendBinary() {
 void sendPartialBinary() {
   int size = 0;
   readBinaryFromLittleFS(binaryBuffer, &size, "/firmware_a.bin");
+  uint8_t response;
   
   if (size == 0) {
     server.send(500, "text/plain", "Failed to read binary from LittleFS");
@@ -510,7 +511,10 @@ void sendPartialBinary() {
     //server.send(200, "text/plain", "Sent " + String(3) + " bytes over UART");
 
     // //check to make sure the STM is good for more data
-    uint8_t response = waitForSTMResponse();
+    response = waitForSTMResponse();
+    if(response != 1){
+      Serial.println("invalid stm response");
+    }
     //Serial.print("STM's Response to this transaction: ");
     //Serial.println(response);
     // if (response != 0xFF) {
