@@ -28,6 +28,7 @@ void handleVerify();
 void handleSendBinary();
 void checkForUpdate();
 void newUpdateAvailable();
+void flush_read_buffer();
 void handleCriticalFailure();
 void enterSendLoop();
 uint8_t waitForSTMResponse();
@@ -94,6 +95,11 @@ void setup() {
 
 void loop() {
   server.handleClient();
+
+  //update the binary with the new version
+  Serial.print("checking for update");
+  checkForUpdate();
+
   Serial.println("Reset STM now");
   delay(10000);
 
@@ -103,7 +109,7 @@ void loop() {
     // {
   // Serial.print("right above new update available");
 
-  newUpdateAvailable();
+  newUpdateAvailable(1);
   
   delay(6000000);
       // count += 1;
@@ -122,57 +128,48 @@ void handleSuccessfulUpdate()
   delay(60000);
 }
 
-void newUpdateAvailable()
+void newUpdateAvailable(int attempt_count)
 {
-  //update the binary with the new version
-  Serial.print("checking for update");
-  checkForUpdate();
-
   //send a 0 to the stm32
   Serial.println("telling stm ready for transmit");
+  flush_read_buffer(); //make sure nothing is on the dataline that shouldn't be
   Serial2.write(0);
 
   //wait for response
   // Serial.print("STMs response: ");
   uint8_t response = waitForSTMResponse();
-  Serial.print(response);
+  Serial.println(response);
 
-  /* STM32 wants to enter the send, receive, ack loop*/
-  if (response == 0) 
+  if (response == 0) /* STM32 wants to enter the send, receive, ack loop*/
   {
-    enterSendLoop();
-  }
-      
-      /* STM32 wants a 1-Minute Delay On This Path*/
-  if (response == 1)
+    sendPartialBinary();
+  }else if (response == 1) /* STM32 wants a 1-Minute Delay On This Path*/
   {
-    //delay for a minute
-    delay(60000); //this is millisecond value
-  }
-      
-  /* STM32 Sends there is a Critical Failure */
-  if (response == 2) 
+    Serial.println("stm32 requested wait " + attempt_count + " times"); //print number of times wait requested
+    delay(60000); ////delay for a minute this is millisecond value
+    attempt_count++;
+    newUpdateAvailable(attempt_count);
+  }else if (response == 2) /* STM32 Sends there is a Critical Failure */
   {
     handleCriticalFailure();
+  } else {
+    Serial.println("Unrecognized response");
   }
     
 }
 
 uint8_t waitForSTMResponse()
 {
-  while (!Serial2.available()){};
-
-  if (Serial2.available() > 0) {
-      uint8_t response = Serial2.read();
-      return response;
-  }
+  while (Serial2.available() == 0){};
+  return (uint8_t)Serial2.read();
 }
 
 void handleCriticalFailure() {}
 
-void enterSendLoop()
-{
-  sendPartialBinary();
+void flush_read_buffer(){
+  while (Serial2.available() > 0) {
+    Serial2.read();
+  }
 }
 
 //toggle pin
