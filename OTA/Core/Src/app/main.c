@@ -31,19 +31,8 @@
 #include "uart_debug.h"
 #include "led.h"
 #include <stdint.h>
+#include "uart3.h"
 
-
-/* Private includes ----------------------------------------------------------*/
-/* USER CODE BEGIN Includes */
-
-/* USER CODE END Includes */
-
-/* Private typedef -----------------------------------------------------------*/
-/* USER CODE BEGIN PTD */
-
-/* USER CODE END PTD */
-
-/* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
 #define LED_RED_PIN     GPIO_PIN_6
 #define LED_BLUE_PIN    GPIO_PIN_7
@@ -56,35 +45,22 @@
 #define FIRMWARE_VERSION   0U
 #endif
 
-/* Private macro -------------------------------------------------------------*/
-/* USER CODE BEGIN PM */
-
-/* USER CODE END PM */
-
 /* Private variables ---------------------------------------------------------*/
 CRC_HandleTypeDef hcrc;
-
 I2C_HandleTypeDef hi2c2;
-
 SPI_HandleTypeDef hspi2;
-
 TSC_HandleTypeDef htsc;
 UART_HandleTypeDef huart3;
 
-volatile static int count = 1;
-
-// uint8_t cmd_arr[3];
-// uint8_t cmd_arr_pointer = 0;
+//volatile static int count = 1;
+volatile static uint8_t val = 1;
+volatile static uint8_t write_result;
 
 #if (DEBUG_UART_ENABLE == 1U)
   // UART_HandleTypeDef huart4;
-  
 #endif /* DEBUG_UART_ENABLE */
 
 PCD_HandleTypeDef hpcd_USB_FS;
-/* USER CODE BEGIN PV */
-
-/* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
 void SystemClock_Config(void);
@@ -100,125 +76,10 @@ static void MX_CRC_Init(void);
 #if (DEBUG_UART_ENABLE == 1U)
 //static void MX_USART4_UART_Init(void);
 #endif /* DEBUG_UART_ENABLE */
-/* USER CODE BEGIN PFP */
-
-/* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
-/* USER CODE BEGIN 0 */
-
-// void Reset_Cmd_Arr(){
-//   cmd_arr[0] = 0x11;
-//   cmd_arr[1] = 0x22;
-//   cmd_arr[2] = 0x33;
-// }
-
-
-// /**
-// Red: PC6 of the STM32F072RBT6.
-// Orange PC8 of the STM32F072RBT6.
-// Green  PC9 of the STM32F072RBT6.
-// Blue  PC7 of the STM32F072RBT6.
-//  */
-// void My_HAL_GPIO_TogglePin(GPIO_TypeDef* GPIOx, uint16_t GPIO_Pin)
-// {
-//     GPIOx->ODR ^= GPIO_Pin;
-// }
-
-/* Enable the system clock to the desired USART in the RCC peripheral. */
-void Enable_SysClock_USART()
-{
-  RCC->APB1ENR |= RCC_APB1ENR_USART3EN;
-}
-
-/* Set the Baud rate for communication to be 115200 bits/second. 
-Using the HAL_RCC_GetHCLKFreq() function to get the system clock frequency.
-*/
-void Set_Baud_Rate()
-{
-  /* Set the Baud Rate to 115200 bits/second 
-  Baud_Divider = 8000000/115200 = 69.444
-  USART_BRR = 69*/
-  uint32_t sys_clock_freq = HAL_RCC_GetHCLKFreq();
-  uint32_t target_baud = 115200;
-  USART3->BRR = sys_clock_freq / target_baud;
-}
-
-/* Set the selected pins into alternate function mode and program the correct alternate function
-number into the GPIO AFR registers.
-PC4 - TX - green jumper
-PC5 - RX - red jumper
-*/
-void Config_Pins()
-{
-  GPIOC->MODER |= GPIO_MODER_MODER4_1;
-  GPIOC->MODER |= GPIO_MODER_MODER5_1;
-  GPIOC->MODER &= ~(GPIO_MODER_MODER4_0);
-  GPIOC->MODER &= ~(GPIO_MODER_MODER5_0);
-
-  GPIOC->AFR[0] |= 1 << (4*4);
-  GPIOC->AFR[0] |= 1 << (4*5);
-}
-
-/* Enable the CR1 in USART3*/
-void Enable_USART_Control()
-{
-  USART3->CR1 |= USART_CR1_UE;
-}
-
-/* The transmitter can send data words of either 7, 8 or 9 bits depending on the M bits status.
-The Transmit Enable bit (TE) must be set in order to activate the transmitter function. The
-data in the transmit shift register is output on the TX pin and the corresponding clock pulses
-are output on the CK pin. 
-
-See details of the USART RX on DM---936, section 27.5.3
-*/
-void Enable_TX_RX()
-{
-  USART3->CR1 |= USART_CR1_TE;
-  USART3->CR1 |= USART_CR1_RE;
-}
-
-void Enable_Receive_Register_NE()
-{
-  USART3->CR1 |= USART_CR1_RXNEIE;
-}
-
-// void Check_Data(int num_of_cmds){
-//   /* 1. Check and wait on the USART status flag that indicates 
-//       the receive (read) register is not empty
-//      2. Use an empty while loop which exits once the flag is set
-//    */
-//   int flag = 1;
-
-//   while(flag){
-//     if(USART3->ISR & USART_ISR_RXNE_Msk){
-//       if (num_of_cmds == 1)
-//       {
-//         #if COLOR_UART
-//         uint8_t recieved_data = USART3->RDR;
-//         flag = Match_CMD_To_LED(recieved_data, num_of_cmds);
-//         #endif
-//       }
-//       else 
-//       {
-//         uint8_t recieved_data = USART3->RDR;
-//         cmd_arr[cmd_arr_pointer] = recieved_data;
-//         cmd_arr_pointer += 1;
-//         flag = 0;
-//       }
-//     }
-//   }
-// }
-
-// void Parse_Program()
-// {
-//   led_off();
-  
-  
-// }
-
-/* USER CODE END 0 */
+//Red: PC6 of the STM32F072RBT6. Orange PC8 of the STM32F072RBT6.
+//Green  PC9 of the STM32F072RBT6. Blue  PC7 of the STM32F072RBT6.
 
 /**
   * @brief  The application entry point.
@@ -229,25 +90,11 @@ int main(void)
   /* Enable all interrupts after jumping to app code */
   __enable_irq();
 
-  /* USER CODE BEGIN 1 */
-
-  /* USER CODE END 1 */
-
-  /* MCU Configuration--------------------------------------------------------*/
-
   /* Reset of all peripherals, Initializes the Flash interface and the Systick. */
   HAL_Init();
 
-  /* USER CODE BEGIN Init */
-
-  /* USER CODE END Init */
-
   /* Configure the system clock */
   SystemClock_Config();
-
-  /* USER CODE BEGIN SysInit */
-
-  /* USER CODE END SysInit */
 
   /* Initialize all configured peripherals */
   // MX_USART3_UART_Init();
@@ -259,10 +106,10 @@ int main(void)
   MX_USB_PCD_Init();
   MX_CRC_Init();
   #if (DEBUG_UART_ENABLE == 1U)
-  //MX_USART4_UART_Init();
-  uart_debug_init(); //USART4
-#endif /* DEBUG_UART_ENABLE */
-  /* USER CODE BEGIN 2 */  
+    //MX_USART4_UART_Init();
+    uart_debug_init(); //USART4
+  #endif /* DEBUG_UART_ENABLE */
+   
   led_init();
 
   /* UART 3 stuff */
@@ -272,13 +119,6 @@ int main(void)
   Enable_TX_RX();
   Enable_USART_Control();
 
-  GPIO_InitTypeDef initStr2 = {GPIO_PIN_0, //Pushbutton
-                              GPIO_MODE_INPUT,
-                              GPIO_PULLDOWN,
-                              GPIO_SPEED_FREQ_LOW};
-
-                              HAL_GPIO_Init(GPIOA,&initStr2);
-
   button_interrupt_config();
   __NVIC_EnableIRQ(EXTI0_1_IRQn);
   NVIC_SetPriority(EXTI0_1_IRQn,1);
@@ -287,12 +127,11 @@ int main(void)
    * Move this call later (after connectivity/sensor checks) for a real app. */
   ota_confirm_current_slot();
 
+  #if (DEBUG_UART_ENABLE == 1U)
   uint8_t current_slot = get_current_slot();
   uint8_t dormant_slot = get_dormant_slot();
-  uint8_t val = 0;
   const ota_image_info_t *image_info = ota_get_running_image_info();
 
-  #if (DEBUG_UART_ENABLE == 1U)
   uart_debug_transmit("App running in Slot ");
   if (current_slot == OTA_SLOT_A) {
     uart_debug_transmit("A\r\n");
@@ -305,61 +144,49 @@ int main(void)
   (void)current_slot;
   (void)dormant_slot;
   (void)image_info;
-
-
-
-  
   //HAL_UARTEx_ReceiveToIdle_DMA(&huart4, recieved_data, sizeof(recieved_data));
   #endif /* DEBUG_UART_ENABLE */
-  
-  /* USER CODE END 2 */
-  //HAL_GPIO_WritePin(GPIOC, LED_BLUE_PIN, GPIO_PIN_SET);
-  /* Infinite loop */
-  /* USER CODE BEGIN WHILE */
-
 
   while (1)
   {
-    // HAL_Delay(5000);
-    // Check_Data(2);
-    // if (cmd_arr_pointer == 2)
-    // {
-    //   Parse_Program();
-    // }
+
+    if(((USART3->ISR & USART_ISR_RXNE) != 0) && val){
+        val = (uint8_t)USART3->RDR;
+    }
     
     /* 3. Call uint8_t receive_char(USART_TypeDef uart) in main and check for a 0 */
-    if (count == 0) { // press the button to check for an update
+    //if (count == 0) { // press the button to check for an update
       
-    // led_on();
-    val = receive_char(USART3);
-    // led_off();
-    uint8_t write_result = 99;
+      //val = receive_char(USART3);
 
-    /* 4. if(0) -> call int flash_write_from_uart(USART_TypeDefuart, uint32_t page_total) */
-    if (val == 0x0 | val == 0x30) {
-      write_result = flash_write_from_uart(USART3, 27);
-    }
-    //  5. add an led function after the write based off the return value 
-    if (write_result == 0) {
-      // uart_debug_transmit("write result was successful - but not verified");
-    }
-    else if (write_result == -1) {
-      // uart_debug_transmit("write result was unsuccessful");
-    }
-    //  6. check the memory region
-    //  7. reset the device and repeat */
+      /* 4. if(0) -> call int flash_write_from_uart(USART_TypeDefuart, uint32_t page_total) */
+      //if (val == 0x0) {
+        //write_result = flash_write_from_uart(USART3, 27);
+      //} else {
+        //write_result = 0xFF;
+      //}
+      //  5. add an led function after the write based off the return value 
+      if (write_result == 0) {
+        // uart_debug_transmit("write result was successful - but not verified");
+      } else if (write_result == 0xFF) {
+        // uart_debug_transmit("write result was unsuccessful");
+      }
+      //  6. check the memory region
+      //  7. reset the device and repeat */
 
-    count += 1;
+      //count += 1;
+    //}
 
-
-  }
     led_counterclockwise(150U);
     //led_clockwise(150U);
-    /* USER CODE END WHILE */
-    
-    /* USER CODE BEGIN 3 */
   }
-  /* USER CODE END 3 */
+}
+
+void EXTI0_1_IRQHandler(void){
+  if(val == 0){
+    write_result = flash_write_from_uart(USART3, 27);
+  }
+  EXTI->PR = 0x1;
 }
 
 /**
@@ -409,11 +236,6 @@ void SystemClock_Config(void)
   }
 }
 
-void EXTI0_1_IRQHandler(void){
-  count = 0;
-  EXTI->PR = 0x1;
-}
-
 // /**
 //   * @brief USART3 Initialization Function
 //   * @param None
@@ -421,14 +243,6 @@ void EXTI0_1_IRQHandler(void){
 //   */
 // static void MX_USART3_UART_Init(void)
 // {
-
-//   /* USER CODE BEGIN USART3_Init 0 */
-
-//   /* USER CODE END USART3_Init 0 */
-
-//   /* USER CODE BEGIN USART3_Init 1 */
-
-//   /* USER CODE END USART3_Init 1 */
 //   huart3.Instance = USART3;
 //   huart3.Init.BaudRate = 115200;
 //   huart3.Init.WordLength = UART_WORDLENGTH_8B;
@@ -443,10 +257,6 @@ void EXTI0_1_IRQHandler(void){
 //   {
 //     Error_Handler();
 //   }
-//   /* USER CODE BEGIN USART3_Init 2 */
-
-//   /* USER CODE END USART3_Init 2 */
-
 // }
 
 /**
@@ -456,14 +266,6 @@ void EXTI0_1_IRQHandler(void){
   */
 static void MX_CRC_Init(void)
 {
-
-  /* USER CODE BEGIN CRC_Init 0 */
-
-  /* USER CODE END CRC_Init 0 */
-
-  /* USER CODE BEGIN CRC_Init 1 */
-
-  /* USER CODE END CRC_Init 1 */
   hcrc.Instance = CRC;
   hcrc.Init.DefaultPolynomialUse = DEFAULT_POLYNOMIAL_ENABLE;
   hcrc.Init.DefaultInitValueUse = DEFAULT_INIT_VALUE_ENABLE;
@@ -474,10 +276,6 @@ static void MX_CRC_Init(void)
   {
     Error_Handler();
   }
-  /* USER CODE BEGIN CRC_Init 2 */
-
-  /* USER CODE END CRC_Init 2 */
-
 }
 
 /**
@@ -488,13 +286,6 @@ static void MX_CRC_Init(void)
 static void MX_I2C2_Init(void)
 {
 
-  /* USER CODE BEGIN I2C2_Init 0 */
-
-  /* USER CODE END I2C2_Init 0 */
-
-  /* USER CODE BEGIN I2C2_Init 1 */
-
-  /* USER CODE END I2C2_Init 1 */
   hi2c2.Instance = I2C2;
   hi2c2.Init.Timing = 0x20303E5D;
   hi2c2.Init.OwnAddress1 = 0;
@@ -509,23 +300,17 @@ static void MX_I2C2_Init(void)
     Error_Handler();
   }
 
-  /** Configure Analogue filter
-  */
+  /** Configure Analogue filter*/
   if (HAL_I2CEx_ConfigAnalogFilter(&hi2c2, I2C_ANALOGFILTER_ENABLE) != HAL_OK)
   {
     Error_Handler();
   }
 
-  /** Configure Digital filter
-  */
+  /** Configure Digital filter*/
   if (HAL_I2CEx_ConfigDigitalFilter(&hi2c2, 0) != HAL_OK)
   {
     Error_Handler();
   }
-  /* USER CODE BEGIN I2C2_Init 2 */
-
-  /* USER CODE END I2C2_Init 2 */
-
 }
 
 /**
@@ -535,14 +320,6 @@ static void MX_I2C2_Init(void)
   */
 static void MX_SPI2_Init(void)
 {
-
-  /* USER CODE BEGIN SPI2_Init 0 */
-
-  /* USER CODE END SPI2_Init 0 */
-
-  /* USER CODE BEGIN SPI2_Init 1 */
-
-  /* USER CODE END SPI2_Init 1 */
   /* SPI2 parameter configuration*/
   hspi2.Instance = SPI2;
   hspi2.Init.Mode = SPI_MODE_MASTER;
@@ -562,10 +339,6 @@ static void MX_SPI2_Init(void)
   {
     Error_Handler();
   }
-  /* USER CODE BEGIN SPI2_Init 2 */
-
-  /* USER CODE END SPI2_Init 2 */
-
 }
 
 /**
@@ -576,16 +349,7 @@ static void MX_SPI2_Init(void)
 static void MX_TSC_Init(void)
 {
 
-  /* USER CODE BEGIN TSC_Init 0 */
-
-  /* USER CODE END TSC_Init 0 */
-
-  /* USER CODE BEGIN TSC_Init 1 */
-
-  /* USER CODE END TSC_Init 1 */
-
-  /** Configure the TSC peripheral
-  */
+  /* Configure the TSC peripheral*/
   htsc.Instance = TSC;
   htsc.Init.CTPulseHighLength = TSC_CTPH_2CYCLES;
   htsc.Init.CTPulseLowLength = TSC_CTPL_2CYCLES;
@@ -605,9 +369,6 @@ static void MX_TSC_Init(void)
   {
     Error_Handler();
   }
-  /* USER CODE BEGIN TSC_Init 2 */
-
-  /* USER CODE END TSC_Init 2 */
 
 }
 
@@ -621,13 +382,6 @@ static void MX_TSC_Init(void)
 static void MX_USART4_UART_Init(void)
 {
 
-  /* USER CODE BEGIN USART4_Init 0 */
-
-  /* USER CODE END USART4_Init 0 */
-
-  /* USER CODE BEGIN USART4_Init 1 */
-
-  /* USER CODE END USART4_Init 1 */
   huart4.Instance = USART4;
   huart4.Init.BaudRate = 38400;
   huart4.Init.WordLength = UART_WORDLENGTH_8B;
@@ -657,13 +411,6 @@ static void MX_USART4_UART_Init(void)
 static void MX_USB_PCD_Init(void)
 {
 
-  /* USER CODE BEGIN USB_Init 0 */
-
-  /* USER CODE END USB_Init 0 */
-
-  /* USER CODE BEGIN USB_Init 1 */
-
-  /* USER CODE END USB_Init 1 */
   hpcd_USB_FS.Instance = USB;
   hpcd_USB_FS.Init.dev_endpoints = 8;
   hpcd_USB_FS.Init.speed = PCD_SPEED_FULL;
@@ -675,10 +422,6 @@ static void MX_USB_PCD_Init(void)
   {
     Error_Handler();
   }
-  /* USER CODE BEGIN USB_Init 2 */
-
-  /* USER CODE END USB_Init 2 */
-
 }
 
 /**
@@ -705,9 +448,6 @@ static void MX_DMA_Init(void)
 static void MX_GPIO_Init(void)
 {
   GPIO_InitTypeDef GPIO_InitStruct = {0};
-  /* USER CODE BEGIN MX_GPIO_Init_1 */
-
-  /* USER CODE END MX_GPIO_Init_1 */
 
   /* GPIO Ports Clock Enable */
   __HAL_RCC_GPIOC_CLK_ENABLE();
@@ -738,15 +478,7 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Mode = GPIO_MODE_EVT_RISING;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   HAL_GPIO_Init(B1_GPIO_Port, &GPIO_InitStruct);
-
-  /* USER CODE BEGIN MX_GPIO_Init_2 */
-
-  /* USER CODE END MX_GPIO_Init_2 */
 }
-
-/* USER CODE BEGIN 4 */
-
-/* USER CODE END 4 */
 
 /**
   * @brief  This function is executed in case of error occurrence.

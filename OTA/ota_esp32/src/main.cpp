@@ -168,34 +168,25 @@ void loop() {
   }
   mqtt.loop();
 
-  //COMMSV1 STUFF ----------------------
-  //update the binary with the new version
-  //Serial.print("Update sent");
-  //checkForUpdate();
-
-  
-
-  // if (millis() - lastCheck > CHECK_INTERVAL) {
-  //   lastCheck = millis();
-    // if (count == 0)
-    // {
-  // Serial.print("right above new update available");
   if(update_available){
-    Serial.print("Update sent");
+
+    Serial.println("Update Ready to send");
+    Serial.println("Send Attempt in:");
     
-    delay(10000);
-    Serial.println("Reset STM now");
-    delay(5000);
+    Serial.println("5");
+    delay(1000);
+    Serial.println("4");
+    delay(1000);
+    Serial.println("3");
+    delay(1000);
+    Serial.println("2");
+    delay(1000);
+    Serial.println("1");
+    delay(1000);
+    
     newUpdateAvailable(1);
     update_available = false;
   }
-
-  //delay(6000000);
-      // count += 1;
-    // }
-    // newUpdateAvailable();
-  // }
-//--------------------------------------------
 }
 
 void handleSuccessfulUpdate()
@@ -504,6 +495,7 @@ void sendPartialBinary() {
       break;
     } 
   }
+
   Serial.println("Sending the three 0's");
   Serial2.write(0);
   Serial2.write(0);
