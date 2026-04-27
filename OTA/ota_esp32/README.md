@@ -14,23 +14,20 @@ HiveMQ Cloud, no local server required.
 
 ## Setup
 
-### 1. Configure WiFi credentials
-In `src/main.cpp`, update with your network credentials:
-```cpp
-const char* ssid = "your_network";
-const char* password = "your_password";
+### 1. Create your local config file
+Copy the template and set your local secrets:
+
+```bash
+cp src/config.example.h src/config.h
 ```
 
-### 2. Configure the server URL
-In `fetchBinary()` and `checkForUpdate()`, update the IP and filenames:
-```cpp
-http.begin("http://<your-PC-IP>:8080/yourfile.bin");  // in fetchBinary()
-http.begin("http://<your-PC-IP>:8080/version.txt");   // in checkForUpdate()
-```
+Then edit `src/config.h` with your own WiFi and MQTT values.
 
-### Configure MQTT credentials
+`src/config.h` is intentionally gitignored, so your local secrets are not tracked.
 
-In src/main.cpp, update with your HiveMQ cluster details:
+### 2. Configure MQTT credentials
+
+In [`src/main.cpp` lines 24–27](src/main.cpp#L24-L27), update with your HiveMQ cluster details:
 
 ```cpp
 #define MQTT_BROKER "your-cluster.hivemq.cloud"
