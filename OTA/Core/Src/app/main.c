@@ -149,36 +149,19 @@ int main(void)
 
   while (1)
   {
-
     if(((USART3->ISR & USART_ISR_RXNE) != 0) && val){
         val = (uint8_t)USART3->RDR;
     }
     
-    /* 3. Call uint8_t receive_char(USART_TypeDef uart) in main and check for a 0 */
-    //if (count == 0) { // press the button to check for an update
-      
-      //val = receive_char(USART3);
-
-      /* 4. if(0) -> call int flash_write_from_uart(USART_TypeDefuart, uint32_t page_total) */
-      //if (val == 0x0) {
-        //write_result = flash_write_from_uart(USART3, 27);
-      //} else {
-        //write_result = 0xFF;
-      //}
-      //  5. add an led function after the write based off the return value 
-      if (write_result == 0) {
+    if (write_result == 0xFF) {
         // uart_debug_transmit("write result was successful - but not verified");
-      } else if (write_result == 0xFF) {
-        // uart_debug_transmit("write result was unsuccessful");
-      }
-      //  6. check the memory region
-      //  7. reset the device and repeat */
+    } 
 
-      //count += 1;
-    //}
-
+    //------------------------------User Program Start-------------------------------------
     led_counterclockwise(150U);
     //led_clockwise(150U);
+
+    //------------------------------User Program End---------------------------------------
   }
 }
 
