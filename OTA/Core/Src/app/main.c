@@ -32,6 +32,7 @@
 #include "led.h"
 #include <stdint.h>
 #include "uart3.h"
+#include "core_cm0.h"
 
 /* USER CODE BEGIN PD */
 #define LED_RED_PIN     GPIO_PIN_6
@@ -54,7 +55,7 @@ UART_HandleTypeDef huart3;
 
 //volatile static int count = 1;
 volatile static uint8_t val = 1;
-volatile static uint8_t write_result;
+volatile static uint8_t write_result = 1;
 
 #if (DEBUG_UART_ENABLE == 1U)
   // UART_HandleTypeDef huart4;
@@ -153,8 +154,9 @@ int main(void)
         val = (uint8_t)USART3->RDR;
     }
     
-    if (write_result == 0xFF) {
+    if (write_result == 0) {
         // uart_debug_transmit("write result was successful - but not verified");
+        NVIC_SystemReset();
     } 
 
     //------------------------------User Program Start-------------------------------------
