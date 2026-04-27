@@ -1,4 +1,5 @@
 #include "flash_update.h"
+#include "led.h"
 #include "stm32f072xb.h"
 #include "stm32f0xx_hal.h"
 #include <stdint.h>
@@ -169,29 +170,46 @@ int flash_write_from_uart(USART_TypeDef *uart, uint32_t page_total){ //assumes f
     if (flash_clr_upd_region(write_address, page_total) != 0) {
       return -1;
     }
-    
-    do {
 
-      transmit_char(0, uart); //TODO THIS FUNCTION EXPLICITLY EXCEPTS BEHAVIOR COULD BE ADDED
+    flash_unlock();
+
+    transmit_char(0, uart); //TODO THIS FUNCTION EXPLICITLY EXCEPTS BEHAVIOR COULD BE ADDED
                               //DICTATING WAIT OR DENY
 
+    uint8_t slot_request = receive_char(uart);
+
+    if(slot_request == 5){
+        transmit_char(current_slot, uart);
+    } else {
+        transmit_char(0xFB, uart);
+        return -1;
+    }
+
+    do {
+      
+      //transmit_char(0, uart); //TODO THIS FUNCTION EXPLICITLY EXCEPTS BEHAVIOR COULD BE ADDED
+                              //DICTATING WAIT OR DENY
+        // led_alternate(100);
       type_byte = receive_char(uart);
       first_byte = receive_char(uart);
       second_byte = receive_char(uart);
-
-      write_data = (((uint16_t)first_byte << 8) | ((uint16_t)second_byte));
+        // led_off();
+      write_data = (((uint16_t)second_byte << 8) | ((uint16_t)first_byte));
 
       if (type_byte == 0) {
+        flash_lock();
         break;
       } else if (type_byte == 1) {
 
         if ((write_address + 1) >= memory_end) {
-          transmit_char(0xFF, uart);
+          transmit_char(0xFE, uart);
+          flash_lock();
           return -1;
         }
-
+        
         if (flash_write(write_address, write_data) != 0) {
-          transmit_char(0xFF, uart);
+            transmit_char(0xFD, uart);
+            flash_lock();
           return -1;
         }
 
@@ -202,7 +220,8 @@ int flash_write_from_uart(USART_TypeDef *uart, uint32_t page_total){ //assumes f
         // placeholder for crc_value handling or other data_type handling
         transmit_char(2, uart);
       } else {
-        transmit_char(0xFF, uart);
+        transmit_char(0xFC, uart);
+        flash_lock();
         return -1;
       }
 
@@ -229,9 +248,19 @@ void transmit_char(uint8_t out, USART_TypeDef *uart){
  * Waits until the USART receive data register is not empty, then returns RDR.
  * ---------------------------------------------------------------------------*/
 uint8_t receive_char(USART_TypeDef *uart){
+    // led_on();
     while(!(uart->ISR & USART_ISR_RXNE)){}
     return (uint8_t)uart->RDR;
-}
+    // int flag = 1;
+    // uint8_t recieved_data;
+    // while(flag){
+    // if(USART3->ISR & USART_ISR_RXNE_Msk){
+    //     recieved_data = USART3->RDR;
+    //     flag=0;
+    //   }
+    // }
+    // return recieved_data;
+  }
 
 
 /* ---------------------------------------------------------------------------

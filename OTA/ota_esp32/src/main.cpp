@@ -7,29 +7,44 @@
 #include <HTTPClient.h>
 #include <LittleFS.h>
 #include <stdint.h>
+#include <esp_rom_crc.h>
+#include <WiFiClientSecure.h>
+#include <PubSubClient.h>
 
+#define CRC_OFFSET  0xD0
 #define LED_DELAY 250U
 #define BINARY_MAX_SIZE 14000 // current size is 12708, could change later
-#define SSID "XX"
-#define PASS "XX"
-#define LOCAL_IP "http://X.X.X.X:8080/OTA_app_a.bin"
-#define VERSION_TXT "http://X.X.X.X:8080/version.txt"
+#define SSID "Overheretrebling"
+#define PASS "Purple1!"
+
+#define LOCAL_IP_A  "https://raw.githubusercontent.com/anton2uha/OTAfiles/main/OTA_app_a.bin"
+#define LOCAL_IP_B  "https://raw.githubusercontent.com/anton2uha/OTAfiles/main/OTA_app_b.bin"
+#define VERSION_TXT "https://raw.githubusercontent.com/anton2uha/OTAfiles/main/version.txt"
+
+#define MQTT_BROKER "d8572968555946a9b813068561cedb0f.s1.eu.hivemq.cloud"
+#define MQTT_PORT   8883  // TLS port
+#define MQTT_USER   "OTAupdate"
+#define MQTT_PASS   "Update123"
+#define MQTT_TOPIC  "ota/update/jeff"
+
+WiFiClientSecure tlsClient;
+PubSubClient mqtt(tlsClient);
 
 // put function declarations here:
-int myFunction(int, int);
 void togglePin(int pin);
 void handleFlash();
 void handleSend();
-void fetchBinary();
-void storeBinaryToLittleFS(uint8_t* data, int size);
-void readBinaryFromLittleFS(uint8_t* buffer, int* size);
+void fetchBinary(const char* url, const char* filename);
+void storeBinaryToLittleFS(uint8_t* data, int size, const char* filename);
+void readBinaryFromLittleFS(uint8_t* buffer, int* size, const char* filename);
 void handleVerify();
 void handleSendBinary();
 void checkForUpdate();
-void newUpdateAvailable();
+void newUpdateAvailable(int val);
+void flush_read_buffer();
 void handleCriticalFailure();
 void enterSendLoop();
-char waitForSTMResponse();
+uint8_t waitForSTMResponse();
 void handleSuccessfulUpdate();
 void sendPartialBinary();
 
@@ -38,18 +53,68 @@ void sendPartialBinary();
 const char* ssid = SSID;
 const char* password = PASS;
 
+bool update_available = false;
+
 unsigned long lastCheck = 0;
 const unsigned long CHECK_INTERVAL = 30000; // check every 30 seconds
-int currentVersion = 1;
+
+int currentVersionA = 1;
+int currentVersionB = 1;
+volatile int count = 0;
 
 // Global buffer for binary data
 uint8_t binaryBuffer[BINARY_MAX_SIZE];
 
 WebServer server(8080);
 
+void mqttCallback(char* topic, byte* payload, unsigned int length) {
+  String message;
+  for (int i = 0; i < length; i++) {
+    message += (char)payload[i];
+  }
+
+  if (message == "flash") {
+    Serial.println("MQTT: flash command received");
+    handleFlash();
+  } else if (message == "fetch") {
+    Serial.println("MQTT: force fetch command received");
+    fetchBinary(LOCAL_IP_A, "/firmware_a.bin");
+    fetchBinary(LOCAL_IP_B, "/firmware_b.bin"); //TODO ADD LOGIC HERE FOR WHICH BINARY
+  } else if (message == "verify") {
+    Serial.println("MQTT: verify command received");
+    handleVerify();
+  } else if (message == "send") {
+    Serial.println("MQTT: send command received");
+    handleSend();
+  } else if (message == "send_binary") {
+    Serial.println("MQTT: send_binary command received");
+    handleSendBinary();
+  } else if (message == "check_update") {
+    Serial.println("MQTT: check_update command received");
+    checkForUpdate();
+  } else {
+    Serial.println("MQTT: unknown command: " + message);
+  }
+}
+
+
+void mqttReconnect() {
+  while (!mqtt.connected()) {
+    Serial.print("Connecting to MQTT...");
+    if (mqtt.connect("ESP32Client", MQTT_USER, MQTT_PASS)) {
+      Serial.println("connected");
+      mqtt.subscribe(MQTT_TOPIC);
+    } else {
+      Serial.println("failed, retrying in 5s");
+      delay(5000);
+    }
+  }
+}
+
+
 void setup() {
   Serial.begin(115200);
-  Serial2.begin(115200);
+  Serial2.begin(115200, SERIAL_8N1, 16, 17);
   delay(500);
   Serial.println("Hello, World!");
   pinMode(LED_BUILTIN, OUTPUT);
@@ -71,15 +136,22 @@ void setup() {
     Serial.println("\nConnected! IP: " + WiFi.localIP().toString());
   }
 
+  tlsClient.setInsecure();
+  mqtt.setServer(MQTT_BROKER, MQTT_PORT);
+  mqtt.setCallback(mqttCallback);
+  mqttReconnect();
+
   server.on("/fetch", []() {
-  fetchBinary();
-  server.send(200, "text/plain", "Binary fetched and stored");
+  fetchBinary(LOCAL_IP_A, "/firmware_a.bin");
+  fetchBinary(LOCAL_IP_B, "/firmware_b.bin");
+  server.send(200, "text/plain", "Binaries fetched and stored");
   });
   server.on("/verify", handleVerify);
   server.on("/flash", handleFlash);
   server.on("/send", handleSend);
   server.on("/send_binary", handleSendBinary);
   server.begin();
+
 
   //void loop is called here so it's acutally doing:
   /* 
@@ -91,12 +163,39 @@ void setup() {
 void loop() {
   server.handleClient();
 
-  if (millis() - lastCheck > CHECK_INTERVAL) {
-    lastCheck = millis();
+  if (!mqtt.connected()) {
+    mqttReconnect();
+  }
+  mqtt.loop();
+
+  //COMMSV1 STUFF ----------------------
+  //update the binary with the new version
+  //Serial.print("Update sent");
+  //checkForUpdate();
+
+  
+
+  // if (millis() - lastCheck > CHECK_INTERVAL) {
+  //   lastCheck = millis();
+    // if (count == 0)
+    // {
+  // Serial.print("right above new update available");
+  if(update_available){
+    Serial.print("Update sent");
     
-    newUpdateAvailable();
+    delay(10000);
+    Serial.println("Reset STM now");
+    delay(5000);
+    newUpdateAvailable(1);
+    update_available = false;
   }
 
+  //delay(6000000);
+      // count += 1;
+    // }
+    // newUpdateAvailable();
+  // }
+//--------------------------------------------
 }
 
 void handleSuccessfulUpdate()
@@ -105,54 +204,53 @@ void handleSuccessfulUpdate()
   for (int i = 0; i < 5; i++) {
     handleFlash();
   }
+  delay(60000);
 }
 
-void newUpdateAvailable()
+void newUpdateAvailable(int attempt_count)
 {
-  //update the binary with the new version
-  checkForUpdate();
   //send a 0 to the stm32
-  Serial2.print(0);
+  Serial.println("telling stm ready for transmit");
+  flush_read_buffer(); //make sure nothing is on the dataline that shouldn't be
+  Serial2.write(0);
+
   //wait for response
-  char response = waitForSTMResponse();
-  /* STM32 wants to enter the send, receive, ack loop*/
-  if (response == 0) 
+  // Serial.print("STMs response: ");
+  uint8_t response = waitForSTMResponse();
+  Serial.println(response);
+
+  if (response == 0) /* STM32 wants to enter the send, receive, ack loop*/
   {
-    enterSendLoop();
-  }
-      
-      /* STM32 wants a 1-Minute Delay On This Path*/
-  if (response == 1)
+    sendPartialBinary();
+  }else if (response == 1) /* STM32 wants a 1-Minute Delay On This Path*/
   {
-    //delay for a minute
-    delay(60000); //this is millisecond value
-  }
-      
-  /* STM32 Sends there is a Critical Failure */
-  if (response == 2) 
+    Serial.print("stm32 requested wait");
+    Serial.print(attempt_count);
+    Serial.println("times"); //print number of times wait requested
+    delay(60000); ////delay for a minute this is millisecond value
+    attempt_count++;
+    newUpdateAvailable(attempt_count);
+  }else if (response == 2) /* STM32 Sends there is a Critical Failure */
   {
     handleCriticalFailure();
+  } else {
+    Serial.println("Unrecognized response");
   }
     
 }
 
-char waitForSTMResponse()
+uint8_t waitForSTMResponse()
 {
-  while (!Serial2.available()) {};
-  if (Serial2.available() > 0) {
-      char response = Serial2.read();
-      return response;
+  while (Serial2.available() == 0){};
+  return (uint8_t)Serial2.read();
+}
+
+void handleCriticalFailure() {}
+
+void flush_read_buffer(){
+  while (Serial2.available() > 0) {
+    Serial2.read();
   }
-}
-
-void handleCriticalFailure()
-{
-  return;
-}
-
-void enterSendLoop()
-{
-  sendPartialBinary();
 }
 
 //toggle pin
@@ -182,14 +280,36 @@ void handleSend() {
   }
 }
 
+uint32_t crc32(uint8_t* image, uint32_t image_size, uint32_t field_offset) {
+  uint32_t crc = 0xFFFFFFFFU;
+  for (uint32_t i = 0U; i < image_size; i++) {
+    uint8_t b = image[i];
+    if (i >= field_offset && i < field_offset + 4U) {
+      b = 0U;
+    }
+    crc ^= b;
+    for (uint32_t j = 0U; j < 8U; j++) {
+      if ((crc & 1U) != 0U) {
+        crc = (crc >> 1) ^ 0xEDB88320U;
+      } else {
+        crc >>= 1;
+      }
+    }
+  }
+  return crc ^ 0xFFFFFFFFU;
+}
+
+
 // Fetches binary file from HTTP server and stores it in LittleFS
 // LittleFS is a flash based filesystem on the ESP32 that persists across power cycles
 // You can access relevant sections by just using the name of the file, no need to deal with addresses
 // currently the file name is firmware.bin, will likely change later...
-void fetchBinary() {
+void fetchBinary(const char* url, const char* filename) {
+  WiFiClientSecure client;
+  client.setInsecure();
   HTTPClient http;
-  // Update this URL when the host PC IP or filename changes
-  http.begin(LOCAL_IP);
+  http.begin(client, url);
+  http.setFollowRedirects(HTTPC_STRICT_FOLLOW_REDIRECTS);
   int httpCode = http.GET();
   
   if (httpCode == 200) {
@@ -200,7 +320,23 @@ void fetchBinary() {
     int bytesRead = stream->readBytes(binaryBuffer, contentLength);
 
     Serial.println("Fetched " + String(bytesRead) + " bytes");
-    storeBinaryToLittleFS(binaryBuffer, bytesRead);
+    storeBinaryToLittleFS(binaryBuffer, bytesRead, filename);
+
+
+    // CRC Checks
+    uint32_t storedCRC;
+    memcpy(&storedCRC, binaryBuffer + CRC_OFFSET, 4);
+    Serial.printf("Stored CRC:   0x%08X\n", storedCRC);
+
+    uint32_t computedCRC = crc32(binaryBuffer, bytesRead, CRC_OFFSET);
+    Serial.printf("Computed CRC: 0x%08X\n", computedCRC);
+
+    if (computedCRC == storedCRC) {
+      Serial.println("CRC valid!");
+    } else {
+      Serial.println("CRC mismatch — binary may be corrupt");
+    }
+    update_available = true; // TODO move to crc checks once setup
   } else {
     Serial.println("HTTP GET failed: " + String(httpCode));
   }
@@ -208,8 +344,8 @@ void fetchBinary() {
 }
 
 // Writes binary data to LittleFS as /firmware.bin
-void storeBinaryToLittleFS(uint8_t* data, int size) {
-  File file = LittleFS.open("/firmware.bin", "w");
+void storeBinaryToLittleFS(uint8_t* data, int size, const char* filename) {
+  File file = LittleFS.open(filename, "w");
   if (!file) {
     Serial.println("Failed to open file for writing");
     return;
@@ -220,30 +356,50 @@ void storeBinaryToLittleFS(uint8_t* data, int size) {
 }
 
 // Reads /firmware.bin from LittleFS into a buffer
-void readBinaryFromLittleFS(uint8_t* buffer, int* size) {
-  File file = LittleFS.open("/firmware.bin", "r");
+void readBinaryFromLittleFS(uint8_t* buffer, int* size, const char* filename) {
+  File file = LittleFS.open(filename, "r");
   if (!file) {
     Serial.println("Failed to open file for reading");
     return;
   }
   *size = file.read(buffer, BINARY_MAX_SIZE);
   file.close();
-  Serial.println("Binary read from LittleFS");
+  Serial.print("Binary read from LittleFS, read this many bytes: ");
+  Serial.println(*size);
 }
 
 // HTTP handler: reads binary from LittleFS and returns size + first 16 byte
 // used to check if write was done properly
 void handleVerify() {
-  int size = 0;
-  readBinaryFromLittleFS(binaryBuffer, &size);
-  if (size == 0) {
-    server.send(500, "text/plain", "Failed to read file");
-    return;
+  String response = "";
+
+  // Verify firmware A
+  int sizeA = 0;
+  readBinaryFromLittleFS(binaryBuffer, &sizeA, "/firmware_a.bin");
+  if (sizeA == 0) {
+    response += "A: Failed to read file\n";
+  } else {
+    response += "A — size: " + String(sizeA) + " bytes, first 16 bytes: ";
+    for (int i = 0; i < 16; i++) {
+      response += String(binaryBuffer[i], HEX) + " ";
+    }
+    response += "\n";
   }
-  String response = "File size: " + String(size) + " bytes\nFirst 16 bytes: ";
-  for (int i = 0; i < 16; i++) {
-    response += String(binaryBuffer[i], HEX) + " ";
+
+  // Verify firmware B
+  int sizeB = 0;
+  readBinaryFromLittleFS(binaryBuffer, &sizeB, "/firmware_b.bin");
+  if (sizeB == 0) {
+    response += "B: Failed to read file\n";
+  } else {
+    response += "B — size: " + String(sizeB) + " bytes, first 16 bytes: ";
+    for (int i = 0; i < 16; i++) {
+      response += String(binaryBuffer[i], HEX) + " ";
+    }
+    response += "\n";
   }
+
+  Serial.println(response);
   server.send(200, "text/plain", response);
 }
 
@@ -252,20 +408,43 @@ void handleVerify() {
 // If a newer version is available, triggers fetchBinary() to download the new firmware
 // and updates currentVersion to reflect the installed version.
 void checkForUpdate() {
+  WiFiClientSecure client;
+  client.setInsecure();
   HTTPClient http;
-  http.begin(VERSION_TXT);
+  http.begin(client, VERSION_TXT);
+  http.setFollowRedirects(HTTPC_STRICT_FOLLOW_REDIRECTS);
   int httpCode = http.GET();
   if (httpCode == 200) {
-    String versionStr = http.getString();
-    versionStr.trim();
-    int serverVersion = versionStr.toInt();
-    if (serverVersion > currentVersion) {
-      Serial.println("New version found, fetching...");
-      fetchBinary();
-      currentVersion = serverVersion;
+    String body = http.getString();
+    body.trim();
+
+    // Parse A=x
+    int aIndex = body.indexOf("A=");
+    int serverVersionA = (aIndex != -1) ? body.substring(aIndex + 2).toInt() : -1;
+
+    // Parse B=x
+    int bIndex = body.indexOf("B=");
+    int serverVersionB = (bIndex != -1) ? body.substring(bIndex + 2).toInt() : -1;
+
+    Serial.println("Server versions — A: " + String(serverVersionA) + ", B: " + String(serverVersionB));
+
+    if (serverVersionA > currentVersionA) {
+      Serial.println("New version for A found, fetching...");
+      fetchBinary(LOCAL_IP_A, "/firmware_a.bin");
+      currentVersionA = serverVersionA;
     } else {
-      Serial.println("No update available (server: " + String(serverVersion) + ", current: " + String(currentVersion) + ")");
+      Serial.println("No update for A (server: " + String(serverVersionA) + ", current: " + String(currentVersionA) + ")");
     }
+
+    if (serverVersionB > currentVersionB) {
+      Serial.println("New version for B found, fetching...");
+      fetchBinary(LOCAL_IP_B, "/firmware_b.bin");
+      currentVersionB = serverVersionB;
+    } else {
+      Serial.println("No update for B (server: " + String(serverVersionB) + ", current: " + String(currentVersionB) + ")");
+    }
+  } else {
+    Serial.print("http.GET failed - not 200 return ");
   }
   http.end();
 }
@@ -274,7 +453,8 @@ void checkForUpdate() {
 // SKELETON code to get started below
 void handleSendBinary() {
   int size = 0;
-  readBinaryFromLittleFS(binaryBuffer, &size);
+  // Right now just sends firmwareA, FIX LATER!!
+  readBinaryFromLittleFS(binaryBuffer, &size, "/firmware_a.bin");
   if (size == 0) {
     server.send(500, "text/plain", "Failed to read binary from LittleFS");
     return;
@@ -286,46 +466,63 @@ void handleSendBinary() {
 
 void sendPartialBinary() {
   int size = 0;
-  readBinaryFromLittleFS(binaryBuffer, &size);
+  uint8_t response;
+
+  Serial2.write(5);
+
+  response = waitForSTMResponse();
+
+  if(response == 2){
+    readBinaryFromLittleFS(binaryBuffer, &size, "/firmware_a.bin");
+    Serial.println("reading from firmware_a sending to region A");
+  } else if(response == 1){
+    readBinaryFromLittleFS(binaryBuffer, &size, "/firmware_b.bin");
+    Serial.println("reading from firmware_b sending to region B");
+  } else{
+    Serial.println("you fucked up");
+    handleCriticalFailure();
+    return;
+  }
+  
   
   if (size == 0) {
     server.send(500, "text/plain", "Failed to read binary from LittleFS");
     return;
   }
 
-  for (int location = 0; location != size -2; location += 2) 
+  for (int location = 0; location <= size -2; location += 2)
   {
-    /* 		[1][x][x] - Half word data transmission */
-    uint8_t data_transmission[] = {0x01, binaryBuffer[location], binaryBuffer[location + 1]}
+    Serial2.write(1);
+    Serial2.write(binaryBuffer[location]);
+    Serial2.write(binaryBuffer[location + 1]);
 
-    //send the data
-    Serial2.write(data_transmission, 3);
-    Serial.println("Sent " + String(3) + " bytes over UART");
-    server.send(200, "text/plain", "Sent " + String(3) + " bytes over UART");  
-
-    //check to make sure the STM is good for more data
-    char response = waitForSTMResponse();
-    if (response != 0xFF) {
-      continue;
-    }
-    handleCriticalFailure();
+    // //check to make sure the STM is good for more data
+    response = waitForSTMResponse();
+    if(response != 1){
+      Serial.println("invalid stm response");
+      Serial.print(response);
+      break;
+    } 
   }
-
-  //send CRC value, we finishe transmitting all the data
-  /* 	[2][x][x] - Transmission complete stop byte (must send 3 bytes still) */
-  uint8_t crc_data[] = {0x1,0x2}
-  uint8_t data_transmission[] = {0x02, crc_data[0], crc_data[1]}
-  char response = waitForSTMResponse();
-  if (response != 0xFF ) {
+  Serial.println("Sending the three 0's");
+  Serial2.write(0);
+  Serial2.write(0);
+  Serial2.write(0);
+  // //send CRC value, we finishe transmitting all the data
+  // /* 	[2][x][x] - Transmission complete stop byte (must send 3 bytes still) */
+  // uint8_t crc_data[] = {0x1,0x2};
+  // uint8_t data_transmission[] = {0x02, crc_data[0], crc_data[1]};
+  // uint8_t response = waitForSTMResponse();
+  // if (response != 0xFF ) {
     
-    //made it to the EOF and send CRC already, the response from the STM32 is good
-    /* 	[0][x][x] - Transmission complete stop byte (must send 3 bytes still) */
-    uint8_t data_transmission[] = {0x00, 0x99, 0x99}
-    char response = waitForSTMResponse();
-    if (response == 0x00 ) {
-      handleSuccessfulUpdate();
-      return;
-    }
-  }
-  handleCriticalFailure();
+  //   //made it to the EOF and send CRC already, the response from the STM32 is good
+  //   /* 	[0][x][x] - Transmission complete stop byte (must send 3 bytes still) */
+  //   uint8_t data_transmission[] = {0x00, 0x99, 0x99};
+  //   uint8_t response = waitForSTMResponse();
+  //   if (response == 0x00 ) {
+  //     handleSuccessfulUpdate();
+  //     return;
+  //   }
+  // }
+  // handleCriticalFailure();
 }
