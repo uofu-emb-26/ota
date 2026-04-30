@@ -48,7 +48,8 @@ End-to-end update path:
 
 ## Hardware Interfaces & Wiring
 
-[PLACEHOLDER: Insert Wiring Diagram Here]
+[//]: # ([PLACEHOLDER: Insert Wiring Diagram Here])
+![wiringdiagram.png](OTA/wiringdiagram.png)
 
 ### ESP32 to STM32 UART Pinout
 | ESP32 | STM32 |
