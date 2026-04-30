@@ -3,7 +3,7 @@
 Reliable A/B firmware update foundation for STM32 with an ESP32 transport bridge.  
 Here is the final presentation video showing a demo and explanation of everything in this readme:
 
-## DEMO VIDEOS
+## Demo Videos
 https://youtu.be/UHACsZe9ke4  
 https://youtube.com/shorts/yXXsLTlftgA?feature=share
 
