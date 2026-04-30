@@ -26,17 +26,23 @@ Core components:
 
 ## Current Boot Behavior
 
-Bootloader runtime currently uses image probing, not metadata policy, to choose the boot target.
+Bootloader uses metadata-driven trial/rollback policy. Image validity is still determined from the per-slot manifest.
 
 Decision flow:
 
-1. Probe `Slot A` and `Slot B`.
-2. Reject slot if vector table sanity fails.
-3. Reject slot if manifest checks fail (`magic`, `format`, `header_size`, `image_size`).
-4. Reject slot if image CRC is missing or mismatched.
-5. If both valid, boot higher `firmware_version`.
-6. If one valid, boot that slot.
-7. If none valid, return `BOOT_ERR_NO_VALID_SLOT` and remain in bootloader loop.
+1. Probe `Slot A` and `Slot B` (vector table + manifest magic/format/size + CRC).
+2. Read OTA metadata (falls back to safe defaults on blank/corrupted flash).
+3. If a `pending_slot` is recorded in metadata:
+   - If pending slot is invalid or `trial_boot_count >= OTA_MAX_TRIAL_BOOTS` → **rollback** to `confirmed_slot`.
+   - Otherwise → increment `trial_boot_count`, persist metadata, **trial boot** pending slot.
+4. If no `pending_slot` → boot the recorded `active_slot` if valid.
+5. Fallback: version-based runtime selection if active slot is unavailable.
+6. If no valid slot found → `BOOT_ERR_NO_VALID_SLOT`, bootloader loops.
+
+Rollback mechanics:
+- `ota_mark_slot_pending(slot)` called by the app after writing a new image to the dormant slot.
+- App must call `ota_confirm_current_slot()` within `OTA_MAX_TRIAL_BOOTS` boots to promote the slot.
+- If not confirmed in time, bootloader rolls back to the previous `confirmed_slot` on next reset.
 
 Implementation references:
 

@@ -15,8 +15,9 @@ Current architecture:
 
 Current state:
 
-- Bootloader currently chooses slot from runtime slot probing only (vector table + image manifest checks + firmware version compare).
-- Metadata module still exists and is power-fail-safe, but is currently bypassed by active boot selection logic.
+- Bootloader uses metadata-driven trial/rollback policy (Phase 3 complete).
+- Slot validity and version are still determined from the per-slot image manifest.
+- Metadata drives pending/trial/confirmed/rollback workflow state.
 
 ## Platform and Constraints
 
@@ -69,7 +70,7 @@ Responsibilities today:
 - Copy vector table to SRAM mirror.
 - Remap SRAM and jump to selected app.
 
-~~Read metadata and run pending/confirmed/trial rollback policy in the boot path.~~
+Read metadata and run pending/confirmed/trial rollback policy in the boot path.
 
 ### Metadata and layout files
 
@@ -164,7 +165,7 @@ cmake --build build/Debug --target OTA_app_b
 ### Current state
 
 - Metadata storage is implemented and power-fail-safe.
-- Metadata is **not** used by active boot selection right now.
+- Metadata **drives** active boot selection: pending/trial/rollback/confirmation flow is live.
 
 ### Intended steady-state role (agreed)
 
@@ -194,7 +195,7 @@ Read/write ownership guidelines:
 
 ~~Bootloader policy is currently metadata-driven with rollback active in boot path.~~
 
-~~Slot image header format is not yet defined.~~
+~~Slot image header format is not yet defined.~~ *(implemented)*
 
 ~~Post-build `.hex` generation is missing.~~
 
@@ -224,14 +225,16 @@ Read/write ownership guidelines:
 2. Verify CRC in bootloader probe before marking slot bootable.
 3. Verify CRC in app updater flow before calling `ota_mark_slot_pending`.
 
-### Phase 3: Re-enable metadata workflow in bootloader (under construction)
+### Phase 3: Re-enable metadata workflow in bootloader (done)
 
 1. Use metadata only for pending/confirmed/trial logic.
 2. Keep slot validity and version discovery strictly manifest-based.
-3. Trial flow target:
-- boot pending if valid
-- app confirms
-- rollback after trial limit when unconfirmed
+3. Trial flow:
+- Boot pending slot if valid and trial count < `OTA_MAX_TRIAL_BOOTS`.
+- Increment `trial_boot_count` and persist metadata before jumping.
+- App calls `ota_confirm_current_slot()` to promote pending → confirmed and reset count.
+- On next reset, if pending slot is still unconfirmed and trial limit is reached, bootloader rolls back to `confirmed_slot`.
+- Rollback also triggers immediately if the pending slot fails manifest/CRC validation.
 
 ### Phase 4: UART3 updater integration (Jeff)
 

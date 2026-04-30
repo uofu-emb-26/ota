@@ -152,16 +152,32 @@ static uint8_t bootloader_best_valid_slot(const boot_slot_info_t *slot_a,
     return OTA_SLOT_NONE;
 }
 
+static void bootloader_log(const char *msg)
+{
+#if (DEBUG_UART_ENABLE == 1U)
+    uart_debug_transmit(msg);
+    uart_debug_transmit("\r\n");
+#else
+    (void)msg;
+#endif
+}
+
 /* --------------------------------------------------------------------------
  * bootloader_run
  *
- * Minimal runtime selector:
- *   - Probe both slots directly from flash (vector table + image_info)
- *   - If both are valid, boot the higher firmware version
- *   - If one is valid, boot it
- *   - If none are valid, return BOOT_ERR_NO_VALID_SLOT
+ * Metadata-driven trial/rollback selector:
  *
- * Metadata-based trial/rollback policy is intentionally bypassed for now.
+ *   1. Probe both slots (vector table + manifest + CRC).
+ *   2. Read OTA metadata (falls back to safe defaults on blank/corrupted flash).
+ *   3. If a pending slot is recorded:
+ *        a. If the pending slot is not bootable or the trial-boot limit has
+ *           been reached → rollback to the last confirmed slot.
+ *        b. Otherwise → increment trial_boot_count, persist metadata, boot
+ *           the pending slot.  The app must call ota_confirm_current_slot()
+ *           before the trial limit is exhausted or rollback will occur on the
+ *           next reset.
+ *   4. If no pending slot → boot the recorded active slot if valid, otherwise
+ *      fall back to version-based runtime selection.
  * --------------------------------------------------------------------------*/
 boot_result_t bootloader_run(void)
 {
@@ -170,15 +186,90 @@ boot_result_t bootloader_run(void)
     bootloader_probe_slot(OTA_SLOT_A, OTA_SLOT_A_START, OTA_SLOT_A_SIZE, &slot_a);
     bootloader_probe_slot(OTA_SLOT_B, OTA_SLOT_B_START, OTA_SLOT_B_SIZE, &slot_b);
 
+    ota_metadata_t meta;
+    ota_metadata_read(&meta);   /* always yields a usable struct */
+
+    /* ------------------------------------------------------------------
+     * Pending-slot trial / rollback path
+     * ----------------------------------------------------------------*/
+    if (meta.pending_slot != OTA_SLOT_NONE) {
+        boot_slot_info_t *pending_info =
+            (meta.pending_slot == OTA_SLOT_A) ? &slot_a : &slot_b;
+        uint32_t pending_base =
+            (meta.pending_slot == OTA_SLOT_A) ? OTA_SLOT_A_START : OTA_SLOT_B_START;
+
+        int do_rollback = 0;
+
+        if (pending_info->bootable == 0U) {
+            bootloader_log_slot_reason(meta.pending_slot,
+                                       "pending slot invalid – rolling back");
+            do_rollback = 1;
+        } else if (meta.trial_boot_count >= OTA_MAX_TRIAL_BOOTS) {
+            bootloader_log_slot_reason(meta.pending_slot,
+                                       "trial boot limit reached – rolling back");
+            do_rollback = 1;
+        }
+
+        if (do_rollback == 0) {
+            /* Perform trial boot: increment counter and jump */
+            meta.trial_boot_count++;
+            meta.active_slot = meta.pending_slot;
+            /* pending_slot intentionally NOT cleared here; confirmation
+             * from the app is required to promote it to confirmed. */
+            ota_metadata_write(&meta);
+            bootloader_log_slot_reason(meta.pending_slot, "trial boot");
+            bootloader_jump_to_app(pending_base);
+            return BOOT_ERR_NO_VALID_SLOT;  /* not reached */
+        }
+
+        /* Rollback: discard pending, restore confirmed slot */
+        meta.pending_slot     = OTA_SLOT_NONE;
+        meta.trial_boot_count = 0U;
+
+        if (meta.confirmed_slot != OTA_SLOT_NONE) {
+            boot_slot_info_t *conf_info =
+                (meta.confirmed_slot == OTA_SLOT_A) ? &slot_a : &slot_b;
+            uint32_t conf_base =
+                (meta.confirmed_slot == OTA_SLOT_A) ? OTA_SLOT_A_START : OTA_SLOT_B_START;
+
+            if (conf_info->bootable != 0U) {
+                meta.active_slot = meta.confirmed_slot;
+                ota_metadata_write(&meta);
+                bootloader_log_slot_reason(meta.confirmed_slot,
+                                           "rollback: booting confirmed slot");
+                bootloader_jump_to_app(conf_base);
+                return BOOT_ERR_NO_VALID_SLOT;  /* not reached */
+            }
+        }
+
+        /* Confirmed slot also unavailable – fall through to runtime selection */
+        bootloader_log("[BOOT] rollback: confirmed slot not bootable, using runtime fallback");
+        ota_metadata_write(&meta);
+    }
+
+    /* ------------------------------------------------------------------
+     * Normal boot: try the recorded active slot first, then runtime fallback
+     * ----------------------------------------------------------------*/
+    if (meta.active_slot == OTA_SLOT_A && slot_a.bootable != 0U) {
+        bootloader_log_slot_reason(OTA_SLOT_A, "booting active slot");
+        bootloader_jump_to_app(OTA_SLOT_A_START);
+        return BOOT_ERR_NO_VALID_SLOT;  /* not reached */
+    }
+    if (meta.active_slot == OTA_SLOT_B && slot_b.bootable != 0U) {
+        bootloader_log_slot_reason(OTA_SLOT_B, "booting active slot");
+        bootloader_jump_to_app(OTA_SLOT_B_START);
+        return BOOT_ERR_NO_VALID_SLOT;  /* not reached */
+    }
+
+    /* Active slot from metadata is unavailable – version-based fallback */
+    bootloader_log("[BOOT] active slot unavailable, using version-based fallback");
     uint8_t slot = bootloader_best_valid_slot(&slot_a, &slot_b);
     if (slot == OTA_SLOT_NONE) {
         return BOOT_ERR_NO_VALID_SLOT;
     }
 
-    uint32_t slot_base = (slot == OTA_SLOT_A) ? OTA_SLOT_A_START
-                                               : OTA_SLOT_B_START;
-
-    bootloader_jump_to_app(slot_base);  /* never returns on success */
+    uint32_t slot_base = (slot == OTA_SLOT_A) ? OTA_SLOT_A_START : OTA_SLOT_B_START;
+    bootloader_jump_to_app(slot_base);
 
     return BOOT_ERR_NO_VALID_SLOT;
 }
