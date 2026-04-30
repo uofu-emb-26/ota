@@ -47,7 +47,7 @@ End-to-end update path:
 ![BlockDiagram-Process](OTA/BlockDiagram-Process.drawio.png)
 
 ## Hardware Interfaces & Wiring
-### Gerber file and kicad_pcb files can be found in the ``/hardware_design_resources`` dir, for those interested in ordering the hardware to run the OTA.
+### Gerber files and kicad_pcb files can be found in the ``/hardware_design_resources`` dir, for those interested in ordering the hardware to run the OTA.
 [//]: # ([PLACEHOLDER: Insert Wiring Diagram Here])
 ![wiringdiagram.png](OTA/wiringdiagram.png)
 
