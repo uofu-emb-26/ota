@@ -27,6 +27,8 @@
 #define MQTT_PASS   "Update123"
 #define MQTT_TOPIC  "ota/update/jeff"
 
+#define REMOTE_BUTTON_PIN 25
+
 WiFiClientSecure tlsClient;
 PubSubClient mqtt(tlsClient);
 
@@ -47,6 +49,7 @@ void enterSendLoop();
 uint8_t waitForSTMResponse();
 void handleSuccessfulUpdate();
 void sendPartialBinary();
+void remote_button_push();
 
 
 // WARNING: update these credentials before flashing in the define at the top of file
@@ -92,6 +95,20 @@ void mqttCallback(char* topic, byte* payload, unsigned int length) {
   } else if (message == "check_update") {
     Serial.println("MQTT: check_update command received");
     checkForUpdate();
+  } else if (message == "update_now"){
+    if(update_available){
+      Serial.println("Updating STM32 in:");
+      Serial.println("3");
+      delay(1000);
+      Serial.println("2");
+      delay(1000);
+      Serial.println("1");
+      delay(1000);
+      remote_button_push();
+
+    } else {
+      Serial.println("Update not available or still processing please either wait or fetch again");
+    }
   } else {
     Serial.println("MQTT: unknown command: " + message);
   }
@@ -118,6 +135,8 @@ void setup() {
   delay(500);
   Serial.println("Hello, World!");
   pinMode(LED_BUILTIN, OUTPUT);
+  pinMode(REMOTE_BUTTON_PIN, OUTPUT);
+  digitalWrite(REMOTE_BUTTON_PIN, LOW);
 
   if (!LittleFS.begin(true)) {
   Serial.println("LittleFS mount failed");
@@ -152,12 +171,6 @@ void setup() {
   server.on("/send_binary", handleSendBinary);
   server.begin();
 
-
-  //void loop is called here so it's acutally doing:
-  /* 
-  void loop() {
-    server.handleClient();
-  }*/
 }
 
 void loop() {
@@ -168,34 +181,25 @@ void loop() {
   }
   mqtt.loop();
 
-  //COMMSV1 STUFF ----------------------
-  //update the binary with the new version
-  //Serial.print("Update sent");
-  //checkForUpdate();
-
-  
-
-  // if (millis() - lastCheck > CHECK_INTERVAL) {
-  //   lastCheck = millis();
-    // if (count == 0)
-    // {
-  // Serial.print("right above new update available");
   if(update_available){
-    Serial.print("Update sent");
+
+    Serial.println("Update Ready to send");
+    Serial.println("Send Attempt in:");
+
+    Serial.println("5");
+    delay(1000);
+    Serial.println("4");
+    delay(1000);
+    Serial.println("3");
+    delay(1000);
+    Serial.println("2");
+    delay(1000);
+    Serial.println("1");
+    delay(1000);
     
-    delay(10000);
-    Serial.println("Reset STM now");
-    delay(5000);
     newUpdateAvailable(1);
     update_available = false;
   }
-
-  //delay(6000000);
-      // count += 1;
-    // }
-    // newUpdateAvailable();
-  // }
-//--------------------------------------------
 }
 
 void handleSuccessfulUpdate()
@@ -213,6 +217,8 @@ void newUpdateAvailable(int attempt_count)
   Serial.println("telling stm ready for transmit");
   flush_read_buffer(); //make sure nothing is on the dataline that shouldn't be
   Serial2.write(0);
+  delay(1000);
+  remote_button_push();
 
   //wait for response
   // Serial.print("STMs response: ");
@@ -479,7 +485,8 @@ void sendPartialBinary() {
     readBinaryFromLittleFS(binaryBuffer, &size, "/firmware_b.bin");
     Serial.println("reading from firmware_b sending to region B");
   } else{
-    Serial.println("you fucked up");
+    Serial.println("you fucked up: ");
+    Serial.print(response);
     handleCriticalFailure();
     return;
   }
@@ -504,6 +511,7 @@ void sendPartialBinary() {
       break;
     } 
   }
+
   Serial.println("Sending the three 0's");
   Serial2.write(0);
   Serial2.write(0);
@@ -525,4 +533,10 @@ void sendPartialBinary() {
   //   }
   // }
   // handleCriticalFailure();
+}
+
+void remote_button_push(){
+  digitalWrite(REMOTE_BUTTON_PIN, HIGH);
+  delay(50);
+  digitalWrite(REMOTE_BUTTON_PIN, LOW);
 }

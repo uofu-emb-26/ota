@@ -186,14 +186,10 @@ int flash_write_from_uart(USART_TypeDef *uart, uint32_t page_total){ //assumes f
     }
 
     do {
-      
-      //transmit_char(0, uart); //TODO THIS FUNCTION EXPLICITLY EXCEPTS BEHAVIOR COULD BE ADDED
-                              //DICTATING WAIT OR DENY
-        // led_alternate(100);
       type_byte = receive_char(uart);
       first_byte = receive_char(uart);
       second_byte = receive_char(uart);
-        // led_off();
+    
       write_data = (((uint16_t)second_byte << 8) | ((uint16_t)first_byte));
 
       if (type_byte == 0) {
@@ -248,19 +244,9 @@ void transmit_char(uint8_t out, USART_TypeDef *uart){
  * Waits until the USART receive data register is not empty, then returns RDR.
  * ---------------------------------------------------------------------------*/
 uint8_t receive_char(USART_TypeDef *uart){
-    // led_on();
     while(!(uart->ISR & USART_ISR_RXNE)){}
     return (uint8_t)uart->RDR;
-    // int flag = 1;
-    // uint8_t recieved_data;
-    // while(flag){
-    // if(USART3->ISR & USART_ISR_RXNE_Msk){
-    //     recieved_data = USART3->RDR;
-    //     flag=0;
-    //   }
-    // }
-    // return recieved_data;
-  }
+}
 
 
 /* ---------------------------------------------------------------------------
@@ -268,6 +254,12 @@ uint8_t receive_char(USART_TypeDef *uart){
  * ---------------------------------------------------------------------------*/
 void button_interrupt_config(void)
 {
+    GPIO_InitTypeDef initStr2 = {GPIO_PIN_0, //Pushbutton
+                                GPIO_MODE_INPUT,
+                                GPIO_PULLDOWN,
+                                GPIO_SPEED_FREQ_LOW};
+
+    HAL_GPIO_Init(GPIOA,&initStr2);
     EXTI->IMR  |= 1UL;
     EXTI->RTSR |= 1UL;
     SYSCFG->EXTICR[0] &= ~0xFU;

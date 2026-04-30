@@ -57,6 +57,7 @@ set(OTA_APP_COMMON_SOURCES
     Core/Src/app/hal_gpio.c
     Core/Src/common/sysmem.c
     Core/Src/common/led.c
+    Core/Src/common/uart3.c
 )
 
 add_executable(OTA_app_a ${OTA_APP_COMMON_SOURCES})
