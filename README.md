@@ -1,124 +1,129 @@
 # OTA Firmware Update Project
 
-Reliable A/B firmware update foundation for STM32 with an ESP32 transport bridge.
+Reliable A/B firmware update foundation for STM32 with an ESP32 transport bridge.  
+Here is the final presentation video showing a demo and explanation of everything in this readme:
+
+## DEMO VIDEOS
+https://youtu.be/UHACsZe9ke4  
+https://youtube.com/shorts/yXXsLTlftgA?feature=share
 
 ## Table of Contents
-
-- [Project Overview](#project-overview)
-- [System Architecture](#system-architecture)
-- [Hardware Interfaces](#hardware-interfaces)
-- [Current Implementation Status](#current-implementation-status)
-- [Repository Layout](#repository-layout)
-- [Getting Started](#getting-started)
-- [Roadmap](#roadmap)
-- [Authors](#authors)
+* [Project Overview](#project-overview)
+* [System Architecture](#system-architecture)
+* [Hardware Interfaces & Wiring](#hardware-interfaces--wiring)
+* [Basic Setup Instructions](#basic-setup-instructions)
+* [Flowcharts](#flowcharts)
+* [Current Implementation Status](#current-implementation-status)
+* [Repository Layout](#repository-layout)
+* [Authors](#authors)
 
 ## Project Overview
 
-### Problem this project solves
+### Purpose
+Many embedded products are deployed in places where physical reflashing is slow, costly, or impossible. A failed firmware update can also brick a device if there is no recovery path. This project builds a robust over-the-air (OTA) update pipeline for an STM32 platform to solve this problem.
 
-Many embedded products are deployed in places where physical reflashing is slow, costly, or impossible. A failed firmware update can also brick a device if there is no recovery path.
+### Functionality
+The system utilizes an A/B swap firmware update layout. The design keeps one known-good binary active while writing a new downloaded binary to an inactive slot. This allows updates to be validated before they become permanent. The update download process is concurrent. Main application tasks are not halted while the new binary is fetched.
 
-### Short description
-
-This project builds a robust over-the-air update pipeline for an STM32 platform using an A/B swap firmware update layout. The design keeps one known-good binary while writing a new binary to the inactive slot, so updates can be validated before becoming permanent. The update process is also concurrent so the main application tasks are not halted during new binary download operation.
-
-### Implementation overview
-
-- A custom STM32 bootloader validates candidate app binaries at boot.
-- The same application is built twice into Slot A and Slot B with custom known binary information.
-- OTA update workflow statuses and metadata (pending/confirmed/trial state) is stored in flash with power-fail-safe writes.
-- An ESP32 transport companion is being integrated to deliver update payloads to the STM32 application.
-
-### What the final system should look like
-
-1. A new firmware image is delivered over the network to the ESP32 bridge.
-2. The running STM32 app receives the payload over UART and writes only the dormant slot.
-3. The app marks the new slot as pending and reboots.
-4. The bootloader validates integrity and boots the new image.
-5. The new app confirms health; if it does not, rollback policy restores the last confirmed image.
-
-## Project Organization
-
-This repository is organized into two layers:
-
-- Top-level documentation (this file) for quick onboarding.
-- STM32 firmware workspace in [OTA](OTA) with bootloader, Slot A, and Slot B builds.
-- ESP32 firmware workspace in [OTA/ota_esp32](OTA/ota_esp32) with PlatformIO on Arduino framework
-
-
+Key components:
+* A custom STM32 bootloader validates candidate app binaries at boot.
+* The same application is built twice into Slot A and Slot B with specific binary information.
+* OTA update workflow metadata is stored in flash with power-fail-safe writes.
+* An ESP32 transport companion delivers update payloads to the STM32 application over UART.
 
 ## System Architecture
 
-Planned end-to-end update path:
+End-to-end update path:
+1. A new firmware binary file is delivered over the network to the ESP32 bridge (stored at https://github.com/anton2uha/OTAfiles).
+2. HiveMQ sends a fetch request to the ESP32. The ESP32 downloads the binaries to its local flash.
+3. The running STM32 application receives the payload from the ESP32 via UART and writes it to the dormant flash bank.
+4. The application marks the dormant slot as pending and reboots.
+5. The bootloader validates available slots (integrity, CRC) and selects the boot target with the highest version.
+6. The new app image confirms itself after health checks.
 
-1. New firmware image is produced and staged by host/server tooling.
-2. ESP32 bridge receives image stream.
-3. STM32 application receives OTA payload and writes only the dormant slot.
-4. Application marks dormant slot as pending and resets.
-5. Bootloader validates available slots and selects boot target.
-6. New app image confirms itself after health checks.
+### Architecture Diagrams
+![BlockDiagram-System Architecture](OTA/BlockDiagram-System_Architecture.drawio.png)  
 
-## Hardware Interfaces
+![BlockDiagram-Process](OTA/BlockDiagram-Process.drawio.png)
 
-### STM32
+## Hardware Interfaces & Wiring
 
-- `UART3`: OTA data path from ESP32 to STM32 application updater (planned).
-- `UART4`: debug strings/diagnostics (current).
+[PLACEHOLDER: Insert Wiring Diagram Here]
 
-### ESP32
+### ESP32 to STM32 UART Pinout
+| ESP32 | STM32 |
+|---|---|
+| GPIO17 (TX) | RX pin (PC5) |
+| GPIO16 (RX) | TX pin (PC4) |
+| GND | GND |
 
-- `UART0`: binary transfer path toward STM32 OTA updater (planned).
-- `UART2`: debug strings/diagnostics (planned).
+### STM32 Interfaces
+* `UART3`: OTA data path from ESP32 to STM32 (Pins PC4, PC5).
+* `UART4`: Debug output path.
 
-Physical pin mapping is board-revision specific and should be finalized in project configuration.
+### ESP32 Interfaces
+* `UART0`: USB serial to receive new programs via PlatformIO.
+* `UART2`: Binary transfer path toward STM32 OTA updater.
+
+## Basic Setup Instructions
+
+### 1. ESP32 Bridge Setup
+**Requirements:** VS Code with PlatformIO extension, HiveMQ Cloud account (free tier), and a 2.4GHz WiFi network.
+
+1. Configure WiFi credentials in `ota_esp32/src/main.cpp`:
+   ```cpp
+   const char* ssid = "your_network";
+   const char* password = "your_password";
+   ```
+2. Configure the server URL and MQTT credentials in `ota_esp32/src/main.cpp`:
+   ```cpp
+   #define MQTT_BROKER "your-cluster.hivemq.cloud"
+   #define MQTT_USER   "your_username"
+   #define MQTT_PASS   "your_password"
+   ```
+   Update the IP in `fetchBinary()` and `checkForUpdate()` to point to your hosted binaries.
+3. Build and upload using PlatformIO. Ensure the ESP32 device is connected via USB. Note: If using WSL, ensure your user is in the `dialout` group to access `/dev/ttyUSB0`.
+
+### 2. STM32 Firmware Setup
+**Requirements:** CMake and ARM GCC toolchain.
+
+1. Navigate to the `OTA` directory.
+2. Run the following CMake commands to build the bootloader and the two application slots:
+   ```bash
+   cmake --preset Debug -B build/Debug
+   cmake --build build/Debug --target OTA_bootloader
+   cmake --build build/Debug --target OTA_app_a
+   cmake --build build/Debug --target OTA_app_b
+   ```
+3. Flash the generated `.elf` or `.hex` files to the STM32 starting at address `0x08000000` for the bootloader.
+
+## Flowcharts
+
+### Bootloader FSM
+![Bootloader Flowchart](OTA/Bootloader_Flowchart_update_2.drawio.png)
+
+### UART ESP32 to STM32 Protocol FSM
+![Arduino State Machine](OTA/Arduino_state_machine.drawio_4.png)
 
 ## Current Implementation Status
 
-Implemented:
-
-- A/B flash partitioning and custom bootloader runtime.
-- Runtime slot probing with vector checks, manifest checks, CRC checks, and version compare.
-- Shared app source built into two linked images (`Slot A`, `Slot B`).
-- Power-fail-safe metadata persistence with scratch-page journaling.
-- Post-build image CRC stamping and generation of `ELF`, `BIN`, `HEX`, and `MAP` artifacts.
-
-In progress / planned:
-
-- STM32 app-side `UART3` framed OTA receive/write pipeline.
-- ESP32 protocol bridge integration.
-- Metadata-driven trial/rollback logic in active boot path.
-- Security hardening (authenticity and anti-rollback).
+* Implemented A/B flash partitioning and custom bootloader runtime.
+* Runtime slot probing with vector checks, manifest checks, CRC checks, and version comparison.
+* Shared app source built into two linked images (Slot A and Slot B).
+* Power-fail-safe metadata persistence with scratch-page journaling.
+* STM32 app-side `UART3` framed OTA receive/write pipeline.
+* ESP32 protocol bridge integration.
 
 ## Repository Layout
 
-- [OTA](OTA): STM32 firmware workspace.
-- [OTA/README.md](OTA/README.md): technical README (file map, flash map, build/flash details).
-- [OTA/PROJECT_HANDOVER.md](OTA/PROJECT_HANDOVER.md): detailed architecture and roadmap.
-- [OTA/ota_esp32](OTA/ota_esp32): ESP32 companion workspace.
-
-## Getting Started
-
-For implementation details, build commands, and target-level docs:
-
-1. Open [OTA/README.md](OTA/README.md)
-2. Review [OTA/PROJECT_HANDOVER.md](OTA/PROJECT_HANDOVER.md)
-3. Build from the `OTA` workspace using documented CMake targets
-
-## Roadmap
-
-The living engineering roadmap is maintained in [OTA/PROJECT_HANDOVER.md](OTA/PROJECT_HANDOVER.md).
-
-Key near-term milestones:
-
-1. Complete app-side dormant-slot update state machine.
-2. Complete ESP32 transport path.
-3. Re-enable metadata-driven trial/rollback in bootloader.
-4. Add end-to-end update/recovery validation coverage.
+* `OTA`: STM32 firmware workspace.
+* `OTA/README.md`: Technical details on file map, flash map, and build/flash details.
+* `OTA/PROJECT_HANDOVER.md`: Detailed architecture and roadmap.
+* `OTA/ota_esp32`: ESP32 companion workspace.
 
 ## Authors
- 
-- Sameeran Chandorkar  
-- Jeffrey Hansen  
-- Nick Baret  
-- Anthony Lesik 
+
+* Sameeran Chandorkar
+* Jeffrey Hansen
+* Nick Baret
+* Anthony Lesik
